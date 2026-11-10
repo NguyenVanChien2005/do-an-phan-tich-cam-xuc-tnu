@@ -1,0 +1,294 @@
+{
+  "run_id": "tfidf-logreg-test-v1",
+  "task": "SENTIMENT",
+  "model_name": "TF-IDF + Logistic Regression (Baseline)",
+  "checkpoint_version": "sklearn-tfidf-lr-balanced-v1",
+  "dataset_version": "TNU_Sentiment_Dataset_Final_v1",
+  "split": "Test",
+  "evaluation_set_id": "test-sentiment-sha256-495ddd0ec4adcebd",
+  "metric_definition_version": "sklearn-multiclass-v1",
+  "n_samples": 3166,
+  "evaluated_at": "2026-11-06 10:19:29 +0700",
+  "result_source": "ARTIFACT_VERIFIED",
+  "accuracy": 0.8749,
+  "macro_precision": 0.7155,
+  "macro_recall": 0.7231,
+  "macro_f1": 0.7184,
+  "weighted_f1": 0.8764,
+  "per_class_metrics": [
+    {
+      "class_id": "0",
+      "class_name": "Tiêu cực (0)",
+      "precision": 0.8727,
+      "recall": 0.929,
+      "f1": 0.9,
+      "support": 1409
+    },
+    {
+      "class_id": "1",
+      "class_name": "Trung tính (1)",
+      "precision": 0.3297,
+      "recall": 0.3593,
+      "f1": 0.3438,
+      "support": 167
+    },
+    {
+      "class_id": "2",
+      "class_name": "Tích cực (2)",
+      "precision": 0.9441,
+      "recall": 0.8811,
+      "f1": 0.9115,
+      "support": 1590
+    }
+  ],
+  "confusion_matrix_labels": [
+    "Tiêu cực (0)",
+    "Trung tính (1)",
+    "Tích cực (2)"
+  ],
+  "confusion_matrix": [
+    [
+      1309,
+      59,
+      41
+    ],
+    [
+      65,
+      60,
+      42
+    ],
+    [
+      126,
+      63,
+      1401
+    ]
+  ],
+  "error_cases": [
+    {
+      "sample_id": "TEST-2370",
+      "masked_text": "nên cho thực hành nhiều hơn .",
+      "true_label": "Tích cực (2)",
+      "predicted_label": "Tiêu cực (0)",
+      "confidence": 0.9944,
+      "error_category": "Ngữ nghĩa gián tiếp / Hàm ý",
+      "analysis_note": "Biểu đạt nhận xét gián tiếp hoặc từ vựng chuyên biệt trong học đường."
+    },
+    {
+      "sample_id": "TEST-1360",
+      "masked_text": "nói hơi nhanh , cho bài tập thêm hơi khó .",
+      "true_label": "Tích cực (2)",
+      "predicted_label": "Tiêu cực (0)",
+      "confidence": 0.9794,
+      "error_category": "Ngữ nghĩa gián tiếp / Hàm ý",
+      "analysis_note": "Biểu đạt nhận xét gián tiếp hoặc từ vựng chuyên biệt trong học đường."
+    },
+    {
+      "sample_id": "TEST-1336",
+      "masked_text": "thầy nên cho nhiều ví dụ hơn .",
+      "true_label": "Tích cực (2)",
+      "predicted_label": "Tiêu cực (0)",
+      "confidence": 0.9771,
+      "error_category": "Ngữ nghĩa gián tiếp / Hàm ý",
+      "analysis_note": "Biểu đạt nhận xét gián tiếp hoặc từ vựng chuyên biệt trong học đường."
+    },
+    {
+      "sample_id": "TEST-2317",
+      "masked_text": "cần , kiệm , liêm , chính .",
+      "true_label": "Tích cực (2)",
+      "predicted_label": "Tiêu cực (0)",
+      "confidence": 0.9711,
+      "error_category": "Ngữ nghĩa gián tiếp / Hàm ý",
+      "analysis_note": "Biểu đạt nhận xét gián tiếp hoặc từ vựng chuyên biệt trong học đường."
+    },
+    {
+      "sample_id": "TEST-0158",
+      "masked_text": "gây mê , hay mắng và rất dễ hờn coloncontemn .",
+      "true_label": "Tiêu cực (0)",
+      "predicted_label": "Tích cực (2)",
+      "confidence": 0.9649,
+      "error_category": "Ngữ nghĩa gián tiếp / Hàm ý",
+      "analysis_note": "Biểu đạt nhận xét gián tiếp hoặc từ vựng chuyên biệt trong học đường."
+    },
+    {
+      "sample_id": "TEST-2448",
+      "masked_text": "chú thích những phần cần phải tập trung .",
+      "true_label": "Trung tính (1)",
+      "predicted_label": "Tiêu cực (0)",
+      "confidence": 0.9564,
+      "error_category": "Ranh giới Trung tính",
+      "analysis_note": "Câu góp ý nhẹ hoặc thông báo thiếu từ khóa cảm xúc mạnh dễ nhầm giữa Trung tính và Tích cực/Tiêu cực."
+    },
+    {
+      "sample_id": "TEST-1339",
+      "masked_text": "còn nghỉ giữa buổi khá nhiều và làm tốn thời gian vô ích .",
+      "true_label": "Tích cực (2)",
+      "predicted_label": "Tiêu cực (0)",
+      "confidence": 0.9529,
+      "error_category": "Ngữ nghĩa gián tiếp / Hàm ý",
+      "analysis_note": "Biểu đạt nhận xét gián tiếp hoặc từ vựng chuyên biệt trong học đường."
+    },
+    {
+      "sample_id": "TEST-1428",
+      "masked_text": "quá nhiều kiến thức cần nắm nhưng thời gian có hạn .",
+      "true_label": "Trung tính (1)",
+      "predicted_label": "Tiêu cực (0)",
+      "confidence": 0.9434,
+      "error_category": "Câu đa ý / Tương phản",
+      "analysis_note": "Câu chứa mệnh đề khen - chê đan xen; mô hình phân loại toàn câu dễ nghiêng về vế sau."
+    },
+    {
+      "sample_id": "TEST-2622",
+      "masked_text": "đi sâu vào vấn đề khó hơn .",
+      "true_label": "Tích cực (2)",
+      "predicted_label": "Tiêu cực (0)",
+      "confidence": 0.9432,
+      "error_category": "Ngữ nghĩa gián tiếp / Hàm ý",
+      "analysis_note": "Biểu đạt nhận xét gián tiếp hoặc từ vựng chuyên biệt trong học đường."
+    },
+    {
+      "sample_id": "TEST-1512",
+      "masked_text": "không có điều gì không hài lòng .",
+      "true_label": "Tích cực (2)",
+      "predicted_label": "Trung tính (1)",
+      "confidence": 0.9302,
+      "error_category": "Ranh giới Trung tính",
+      "analysis_note": "Câu góp ý nhẹ hoặc thông báo thiếu từ khóa cảm xúc mạnh dễ nhầm giữa Trung tính và Tích cực/Tiêu cực."
+    },
+    {
+      "sample_id": "TEST-1781",
+      "masked_text": "nên nhiều vấn đề thầy giảng còn hơi mông lung khó hiểu .",
+      "true_label": "Tích cực (2)",
+      "predicted_label": "Tiêu cực (0)",
+      "confidence": 0.9277,
+      "error_category": "Ngữ nghĩa gián tiếp / Hàm ý",
+      "analysis_note": "Biểu đạt nhận xét gián tiếp hoặc từ vựng chuyên biệt trong học đường."
+    },
+    {
+      "sample_id": "TEST-1364",
+      "masked_text": "slide bài giảng chưa được đưa lên .",
+      "true_label": "Tích cực (2)",
+      "predicted_label": "Tiêu cực (0)",
+      "confidence": 0.9246,
+      "error_category": "Ngữ nghĩa gián tiếp / Hàm ý",
+      "analysis_note": "Biểu đạt nhận xét gián tiếp hoặc từ vựng chuyên biệt trong học đường."
+    },
+    {
+      "sample_id": "TEST-0056",
+      "masked_text": "ấn tượng nhất doubledot dạy không cần máy chiếu hay laptop , nhưng lượng bài giảng có thể nói là \" khủng \" , nhìn thầy ghi bài giảng lên bảng mà bất ngờ .",
+      "true_label": "Tích cực (2)",
+      "predicted_label": "Tiêu cực (0)",
+      "confidence": 0.9243,
+      "error_category": "Câu đa ý / Tương phản",
+      "analysis_note": "Câu chứa mệnh đề khen - chê đan xen; mô hình phân loại toàn câu dễ nghiêng về vế sau."
+    },
+    {
+      "sample_id": "TEST-0855",
+      "masked_text": "em xin cám ơn !",
+      "true_label": "Tích cực (2)",
+      "predicted_label": "Trung tính (1)",
+      "confidence": 0.9164,
+      "error_category": "Ranh giới Trung tính",
+      "analysis_note": "Câu góp ý nhẹ hoặc thông báo thiếu từ khóa cảm xúc mạnh dễ nhầm giữa Trung tính và Tích cực/Tiêu cực."
+    },
+    {
+      "sample_id": "TEST-2173",
+      "masked_text": "chỉ cần cho bài tập rồi làm nộp .",
+      "true_label": "Trung tính (1)",
+      "predicted_label": "Tiêu cực (0)",
+      "confidence": 0.9145,
+      "error_category": "Ranh giới Trung tính",
+      "analysis_note": "Câu góp ý nhẹ hoặc thông báo thiếu từ khóa cảm xúc mạnh dễ nhầm giữa Trung tính và Tích cực/Tiêu cực."
+    },
+    {
+      "sample_id": "TEST-0283",
+      "masked_text": "dạy miên man , ép buộc sinh viên .",
+      "true_label": "Tiêu cực (0)",
+      "predicted_label": "Tích cực (2)",
+      "confidence": 0.9142,
+      "error_category": "Ngữ nghĩa gián tiếp / Hàm ý",
+      "analysis_note": "Biểu đạt nhận xét gián tiếp hoặc từ vựng chuyên biệt trong học đường."
+    },
+    {
+      "sample_id": "TEST-0872",
+      "masked_text": "sẽ có thông báo đi học cụ thể trên phòng máy để sửa chữa bài tập cho những ai chưa hiểu rõ cách làm .",
+      "true_label": "Tích cực (2)",
+      "predicted_label": "Tiêu cực (0)",
+      "confidence": 0.9106,
+      "error_category": "Ngữ nghĩa gián tiếp / Hàm ý",
+      "analysis_note": "Biểu đạt nhận xét gián tiếp hoặc từ vựng chuyên biệt trong học đường."
+    },
+    {
+      "sample_id": "TEST-1079",
+      "masked_text": "giảng viên chưa đi sâu vào vấn đề bài học .",
+      "true_label": "Tích cực (2)",
+      "predicted_label": "Tiêu cực (0)",
+      "confidence": 0.9082,
+      "error_category": "Ngữ nghĩa gián tiếp / Hàm ý",
+      "analysis_note": "Biểu đạt nhận xét gián tiếp hoặc từ vựng chuyên biệt trong học đường."
+    },
+    {
+      "sample_id": "TEST-1245",
+      "masked_text": "thầy dạy hơi khó hiểu nhưng rất kỹ .",
+      "true_label": "Tích cực (2)",
+      "predicted_label": "Tiêu cực (0)",
+      "confidence": 0.9034,
+      "error_category": "Câu đa ý / Tương phản",
+      "analysis_note": "Câu chứa mệnh đề khen - chê đan xen; mô hình phân loại toàn câu dễ nghiêng về vế sau."
+    },
+    {
+      "sample_id": "TEST-2471",
+      "masked_text": "dạy liên hệ thực tế , giảng dễ hiểu .",
+      "true_label": "Tiêu cực (0)",
+      "predicted_label": "Tích cực (2)",
+      "confidence": 0.9021,
+      "error_category": "Ngữ nghĩa gián tiếp / Hàm ý",
+      "analysis_note": "Biểu đạt nhận xét gián tiếp hoặc từ vựng chuyên biệt trong học đường."
+    },
+    {
+      "sample_id": "TEST-2630",
+      "masked_text": "chi tiết .",
+      "true_label": "Trung tính (1)",
+      "predicted_label": "Tích cực (2)",
+      "confidence": 0.8992,
+      "error_category": "Ranh giới Trung tính",
+      "analysis_note": "Câu góp ý nhẹ hoặc thông báo thiếu từ khóa cảm xúc mạnh dễ nhầm giữa Trung tính và Tích cực/Tiêu cực."
+    },
+    {
+      "sample_id": "TEST-2265",
+      "masked_text": "em đóng góp cũng chỉ mong để sau này các lớp xử lý ngôn ngữ tự nhiên đông hơn và nhiều sinh viên chọn hơn .",
+      "true_label": "Tích cực (2)",
+      "predicted_label": "Tiêu cực (0)",
+      "confidence": 0.896,
+      "error_category": "Ngữ nghĩa gián tiếp / Hàm ý",
+      "analysis_note": "Biểu đạt nhận xét gián tiếp hoặc từ vựng chuyên biệt trong học đường."
+    },
+    {
+      "sample_id": "TEST-2678",
+      "masked_text": "một số chỗ khó hiểu , nhưng nếu chăm chỉ tự học thì sẽ khắc phục được .",
+      "true_label": "Trung tính (1)",
+      "predicted_label": "Tiêu cực (0)",
+      "confidence": 0.8956,
+      "error_category": "Câu đa ý / Tương phản",
+      "analysis_note": "Câu chứa mệnh đề khen - chê đan xen; mô hình phân loại toàn câu dễ nghiêng về vế sau."
+    },
+    {
+      "sample_id": "TEST-2352",
+      "masked_text": "thầy nói ít nhưng em hiểu nhiều hơn .",
+      "true_label": "Tích cực (2)",
+      "predicted_label": "Tiêu cực (0)",
+      "confidence": 0.8764,
+      "error_category": "Câu đa ý / Tương phản",
+      "analysis_note": "Câu chứa mệnh đề khen - chê đan xen; mô hình phân loại toàn câu dễ nghiêng về vế sau."
+    },
+    {
+      "sample_id": "TEST-1275",
+      "masked_text": "lớp buồn không có ý kiến nhiều .",
+      "true_label": "Tiêu cực (0)",
+      "predicted_label": "Trung tính (1)",
+      "confidence": 0.8759,
+      "error_category": "Ranh giới Trung tính",
+      "analysis_note": "Câu góp ý nhẹ hoặc thông báo thiếu từ khóa cảm xúc mạnh dễ nhầm giữa Trung tính và Tích cực/Tiêu cực."
+    }
+  ],
+  "notes": "Mô hình cơ sở (Baseline) huấn luyện trên tnu_train_final.csv, đánh giá cùng tập tnu_test_final.csv."
+}

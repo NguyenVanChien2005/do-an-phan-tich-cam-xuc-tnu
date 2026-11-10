@@ -1,0 +1,294 @@
+{
+  "run_id": "phobert-focal-val-v1",
+  "task": "SENTIMENT",
+  "model_name": "PhoBERT-base-v2 (Fine-tuned)",
+  "checkpoint_version": "phobert_tnu_best_model",
+  "dataset_version": "TNU_Sentiment_Dataset_Final_v1",
+  "split": "Validation",
+  "evaluation_set_id": "validation-sentiment-sha256-3b316430e855ddc6",
+  "metric_definition_version": "sklearn-multiclass-v1",
+  "n_samples": 1709,
+  "evaluated_at": "2026-11-06 10:19:28 +0700",
+  "result_source": "ARTIFACT_VERIFIED",
+  "accuracy": 0.9561,
+  "macro_precision": 0.9195,
+  "macro_recall": 0.9038,
+  "macro_f1": 0.9113,
+  "weighted_f1": 0.9557,
+  "per_class_metrics": [
+    {
+      "class_id": "0",
+      "class_name": "Tiêu cực (0)",
+      "precision": 0.9591,
+      "recall": 0.9758,
+      "f1": 0.9674,
+      "support": 745
+    },
+    {
+      "class_id": "1",
+      "class_name": "Trung tính (1)",
+      "precision": 0.8302,
+      "recall": 0.7719,
+      "f1": 0.8,
+      "support": 114
+    },
+    {
+      "class_id": "2",
+      "class_name": "Tích cực (2)",
+      "precision": 0.9692,
+      "recall": 0.9635,
+      "f1": 0.9664,
+      "support": 850
+    }
+  ],
+  "confusion_matrix_labels": [
+    "Tiêu cực (0)",
+    "Trung tính (1)",
+    "Tích cực (2)"
+  ],
+  "confusion_matrix": [
+    [
+      727,
+      7,
+      11
+    ],
+    [
+      11,
+      88,
+      15
+    ],
+    [
+      20,
+      11,
+      819
+    ]
+  ],
+  "error_cases": [
+    {
+      "sample_id": "VALIDATION-1265",
+      "masked_text": "đó là nội dung chương trình học rất tốt .",
+      "true_label": "Tiêu cực (0)",
+      "predicted_label": "Tích cực (2)",
+      "confidence": 0.9471,
+      "error_category": "Ngữ nghĩa gián tiếp / Hàm ý",
+      "analysis_note": "Biểu đạt nhận xét gián tiếp hoặc từ vựng chuyên biệt trong học đường."
+    },
+    {
+      "sample_id": "VALIDATION-0118",
+      "masked_text": "sự nhiệt tình .",
+      "true_label": "Trung tính (1)",
+      "predicted_label": "Tích cực (2)",
+      "confidence": 0.9458,
+      "error_category": "Ranh giới Trung tính",
+      "analysis_note": "Câu góp ý nhẹ hoặc thông báo thiếu từ khóa cảm xúc mạnh dễ nhầm giữa Trung tính và Tích cực/Tiêu cực."
+    },
+    {
+      "sample_id": "VALIDATION-0940",
+      "masked_text": "cô dạy rất nhiệt tình , tận tâm và chu đáo .",
+      "true_label": "Tiêu cực (0)",
+      "predicted_label": "Tích cực (2)",
+      "confidence": 0.9458,
+      "error_category": "Ngữ nghĩa gián tiếp / Hàm ý",
+      "analysis_note": "Biểu đạt nhận xét gián tiếp hoặc từ vựng chuyên biệt trong học đường."
+    },
+    {
+      "sample_id": "VALIDATION-0986",
+      "masked_text": "sự nhiệt tình của cô .",
+      "true_label": "Trung tính (1)",
+      "predicted_label": "Tích cực (2)",
+      "confidence": 0.9457,
+      "error_category": "Ranh giới Trung tính",
+      "analysis_note": "Câu góp ý nhẹ hoặc thông báo thiếu từ khóa cảm xúc mạnh dễ nhầm giữa Trung tính và Tích cực/Tiêu cực."
+    },
+    {
+      "sample_id": "VALIDATION-0798",
+      "masked_text": "thực tiễn .",
+      "true_label": "Trung tính (1)",
+      "predicted_label": "Tích cực (2)",
+      "confidence": 0.9399,
+      "error_category": "Ranh giới Trung tính",
+      "analysis_note": "Câu góp ý nhẹ hoặc thông báo thiếu từ khóa cảm xúc mạnh dễ nhầm giữa Trung tính và Tích cực/Tiêu cực."
+    },
+    {
+      "sample_id": "VALIDATION-0942",
+      "masked_text": "nói chung again 10 fraction 10 .",
+      "true_label": "Tích cực (2)",
+      "predicted_label": "Trung tính (1)",
+      "confidence": 0.9336,
+      "error_category": "Ranh giới Trung tính",
+      "analysis_note": "Câu góp ý nhẹ hoặc thông báo thiếu từ khóa cảm xúc mạnh dễ nhầm giữa Trung tính và Tích cực/Tiêu cực."
+    },
+    {
+      "sample_id": "VALIDATION-1281",
+      "masked_text": "cảm ơn thầy rất nhiều .",
+      "true_label": "Trung tính (1)",
+      "predicted_label": "Tích cực (2)",
+      "confidence": 0.9279,
+      "error_category": "Ranh giới Trung tính",
+      "analysis_note": "Câu góp ý nhẹ hoặc thông báo thiếu từ khóa cảm xúc mạnh dễ nhầm giữa Trung tính và Tích cực/Tiêu cực."
+    },
+    {
+      "sample_id": "VALIDATION-1427",
+      "masked_text": "do là hình thức thực hành 2 .",
+      "true_label": "Tiêu cực (0)",
+      "predicted_label": "Trung tính (1)",
+      "confidence": 0.9217,
+      "error_category": "Ranh giới Trung tính",
+      "analysis_note": "Câu góp ý nhẹ hoặc thông báo thiếu từ khóa cảm xúc mạnh dễ nhầm giữa Trung tính và Tích cực/Tiêu cực."
+    },
+    {
+      "sample_id": "VALIDATION-0827",
+      "masked_text": "hỗ trợ nhiều bài tập giúp nâng cao trình độ .",
+      "true_label": "Tiêu cực (0)",
+      "predicted_label": "Tích cực (2)",
+      "confidence": 0.9207,
+      "error_category": "Ngữ nghĩa gián tiếp / Hàm ý",
+      "analysis_note": "Biểu đạt nhận xét gián tiếp hoặc từ vựng chuyên biệt trong học đường."
+    },
+    {
+      "sample_id": "VALIDATION-0920",
+      "masked_text": "giáo trình tiếng anh .",
+      "true_label": "Tiêu cực (0)",
+      "predicted_label": "Trung tính (1)",
+      "confidence": 0.9179,
+      "error_category": "Ranh giới Trung tính",
+      "analysis_note": "Câu góp ý nhẹ hoặc thông báo thiếu từ khóa cảm xúc mạnh dễ nhầm giữa Trung tính và Tích cực/Tiêu cực."
+    },
+    {
+      "sample_id": "VALIDATION-1255",
+      "masked_text": "thầy có kiến thức nhiều .",
+      "true_label": "Trung tính (1)",
+      "predicted_label": "Tích cực (2)",
+      "confidence": 0.9128,
+      "error_category": "Ranh giới Trung tính",
+      "analysis_note": "Câu góp ý nhẹ hoặc thông báo thiếu từ khóa cảm xúc mạnh dễ nhầm giữa Trung tính và Tích cực/Tiêu cực."
+    },
+    {
+      "sample_id": "VALIDATION-0783",
+      "masked_text": "thầy dạy được .",
+      "true_label": "Tích cực (2)",
+      "predicted_label": "Trung tính (1)",
+      "confidence": 0.9104,
+      "error_category": "Ranh giới Trung tính",
+      "analysis_note": "Câu góp ý nhẹ hoặc thông báo thiếu từ khóa cảm xúc mạnh dễ nhầm giữa Trung tính và Tích cực/Tiêu cực."
+    },
+    {
+      "sample_id": "VALIDATION-0128",
+      "masked_text": "cẩn thận .",
+      "true_label": "Trung tính (1)",
+      "predicted_label": "Tích cực (2)",
+      "confidence": 0.9033,
+      "error_category": "Ranh giới Trung tính",
+      "analysis_note": "Câu góp ý nhẹ hoặc thông báo thiếu từ khóa cảm xúc mạnh dễ nhầm giữa Trung tính và Tích cực/Tiêu cực."
+    },
+    {
+      "sample_id": "VALIDATION-1061",
+      "masked_text": "điều này tạo cho sinh viên sự chủ động trong học tập .",
+      "true_label": "Trung tính (1)",
+      "predicted_label": "Tích cực (2)",
+      "confidence": 0.8995,
+      "error_category": "Ranh giới Trung tính",
+      "analysis_note": "Câu góp ý nhẹ hoặc thông báo thiếu từ khóa cảm xúc mạnh dễ nhầm giữa Trung tính và Tích cực/Tiêu cực."
+    },
+    {
+      "sample_id": "VALIDATION-1571",
+      "masked_text": "trong nửa đầu của học kỳ không có giáo viên hướng dẫn thực hành .",
+      "true_label": "Tích cực (2)",
+      "predicted_label": "Tiêu cực (0)",
+      "confidence": 0.8961,
+      "error_category": "Ngữ nghĩa gián tiếp / Hàm ý",
+      "analysis_note": "Biểu đạt nhận xét gián tiếp hoặc từ vựng chuyên biệt trong học đường."
+    },
+    {
+      "sample_id": "VALIDATION-0570",
+      "masked_text": "hiện nay theo em nhận thấy , trong khi lúc học thì sinh viên chỉ được học về doubledot kỹ năng ghi chép , kỹ tổ chức cuộc họp .",
+      "true_label": "Trung tính (1)",
+      "predicted_label": "Tiêu cực (0)",
+      "confidence": 0.8959,
+      "error_category": "Ranh giới Trung tính",
+      "analysis_note": "Câu góp ý nhẹ hoặc thông báo thiếu từ khóa cảm xúc mạnh dễ nhầm giữa Trung tính và Tích cực/Tiêu cực."
+    },
+    {
+      "sample_id": "VALIDATION-1565",
+      "masked_text": "trân trọng .",
+      "true_label": "Trung tính (1)",
+      "predicted_label": "Tích cực (2)",
+      "confidence": 0.8894,
+      "error_category": "Ranh giới Trung tính",
+      "analysis_note": "Câu góp ý nhẹ hoặc thông báo thiếu từ khóa cảm xúc mạnh dễ nhầm giữa Trung tính và Tích cực/Tiêu cực."
+    },
+    {
+      "sample_id": "VALIDATION-0366",
+      "masked_text": "nguyên kỳ này em thấy học được mỗi môn của thầy dạy là vô .",
+      "true_label": "Tích cực (2)",
+      "predicted_label": "Tiêu cực (0)",
+      "confidence": 0.8849,
+      "error_category": "Ngữ nghĩa gián tiếp / Hàm ý",
+      "analysis_note": "Biểu đạt nhận xét gián tiếp hoặc từ vựng chuyên biệt trong học đường."
+    },
+    {
+      "sample_id": "VALIDATION-0661",
+      "masked_text": "có thể ta sẽ tìm thấy được một phương pháp lập trình cho bài toán đó tối ưu hơn , hay hơn .",
+      "true_label": "Tích cực (2)",
+      "predicted_label": "Tiêu cực (0)",
+      "confidence": 0.884,
+      "error_category": "Ngữ nghĩa gián tiếp / Hàm ý",
+      "analysis_note": "Biểu đạt nhận xét gián tiếp hoặc từ vựng chuyên biệt trong học đường."
+    },
+    {
+      "sample_id": "VALIDATION-0542",
+      "masked_text": "trong một khoảng thời gian ngắn không thể vừa tìm hiểu vừa làm được .",
+      "true_label": "Trung tính (1)",
+      "predicted_label": "Tiêu cực (0)",
+      "confidence": 0.8824,
+      "error_category": "Ranh giới Trung tính",
+      "analysis_note": "Câu góp ý nhẹ hoặc thông báo thiếu từ khóa cảm xúc mạnh dễ nhầm giữa Trung tính và Tích cực/Tiêu cực."
+    },
+    {
+      "sample_id": "VALIDATION-0984",
+      "masked_text": "dạy cách học hiểu vấn đề chứ không học vẹt .",
+      "true_label": "Tiêu cực (0)",
+      "predicted_label": "Tích cực (2)",
+      "confidence": 0.8799,
+      "error_category": "Ngữ nghĩa gián tiếp / Hàm ý",
+      "analysis_note": "Biểu đạt nhận xét gián tiếp hoặc từ vựng chuyên biệt trong học đường."
+    },
+    {
+      "sample_id": "VALIDATION-0533",
+      "masked_text": "mở rộng hệ thống bài giảng .",
+      "true_label": "Trung tính (1)",
+      "predicted_label": "Tiêu cực (0)",
+      "confidence": 0.8781,
+      "error_category": "Ranh giới Trung tính",
+      "analysis_note": "Câu góp ý nhẹ hoặc thông báo thiếu từ khóa cảm xúc mạnh dễ nhầm giữa Trung tính và Tích cực/Tiêu cực."
+    },
+    {
+      "sample_id": "VALIDATION-0698",
+      "masked_text": "mong thầy yêu thương tất cả học trò của mình !",
+      "true_label": "Tiêu cực (0)",
+      "predicted_label": "Tích cực (2)",
+      "confidence": 0.8704,
+      "error_category": "Ngữ nghĩa gián tiếp / Hàm ý",
+      "analysis_note": "Biểu đạt nhận xét gián tiếp hoặc từ vựng chuyên biệt trong học đường."
+    },
+    {
+      "sample_id": "VALIDATION-1519",
+      "masked_text": "bản thân sinh viên chưa từng gặp giảng viên này một lần nào trong khóa học .",
+      "true_label": "Tiêu cực (0)",
+      "predicted_label": "Trung tính (1)",
+      "confidence": 0.8681,
+      "error_category": "Ranh giới Trung tính",
+      "analysis_note": "Câu góp ý nhẹ hoặc thông báo thiếu từ khóa cảm xúc mạnh dễ nhầm giữa Trung tính và Tích cực/Tiêu cực."
+    },
+    {
+      "sample_id": "VALIDATION-0689",
+      "masked_text": "thời gian trên lớp không hiệu quả .",
+      "true_label": "Tích cực (2)",
+      "predicted_label": "Tiêu cực (0)",
+      "confidence": 0.8658,
+      "error_category": "Ngữ nghĩa gián tiếp / Hàm ý",
+      "analysis_note": "Biểu đạt nhận xét gián tiếp hoặc từ vựng chuyên biệt trong học đường."
+    }
+  ],
+  "notes": "Đánh giá trực tiếp từ checkpoint phobert_tnu_best_model trên tnu_val_final.csv."
+}

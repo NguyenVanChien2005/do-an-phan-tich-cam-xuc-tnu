@@ -1,0 +1,5 @@
+sentence,unit_code,source_name,feedback_date,source_record_id,topic_code
+"Giảng viên hướng dẫn thực hành rất tận tình, giải đáp chi tiết thắc mắc của sinh viên.",ICTU,SURVEY_PORTAL,2026-10-15 08:30:00,DEMO-IMP-001,LECTURER
+"Phòng máy tầng 3 có hai máy tính hỏng chuột và màn hình bị nhòe màu cần bảo trì.",TNUT,QA_BOX,2026-10-16 14:15:00,DEMO-IMP-002,FACILITY
+"Lịch học học phần chuyên ngành được bố trí vào sáng thứ Tư hàng tuần theo thời khóa biểu.",TNUE,LMS_FEEDBACK,2026-10-17 09:00:00,DEMO-IMP-003,CURRICULUM
+

@@ -1,0 +1,111 @@
+[
+  {
+    "sample_id": "SAMPLE_01_PRAISE_TEENCODE",
+    "group_label": "1. Khen có teencode và emoji",
+    "text": "Thầy dạy môn lập trình Python giảng bài siêuuuu dễ hỉu 🥰, nhiệt tình hỗ trợ sv làm đồ án.",
+    "suggested_unit": "ICTU",
+    "suggested_source": "SURVEY_PORTAL",
+    "suggested_topic": "LECTURER",
+    "note": "Kiểm thử xử lý ký tự kéo dài (siêuuuu), từ viết tắt/teencode (hỉu, sv) và emoji cảm xúc (🥰).",
+    "illustrative_result": {
+      "label_id": 2,
+      "confidence": 0.9466,
+      "probabilities": {
+        "0": 0.0333,
+        "1": 0.0201,
+        "2": 0.9466
+      }
+    }
+  },
+  {
+    "sample_id": "SAMPLE_02_FACILITY_COMPLAINT",
+    "group_label": "2. Chê cơ sở vật chất",
+    "text": "Phòng thực hành máy tính điều hòa hỏng nóng ko chịu đc, máy chiếu mờ và dây cáp HDMI chập chờn.",
+    "suggested_unit": "TNUT",
+    "suggested_source": "QA_BOX",
+    "suggested_topic": "FACILITY",
+    "note": "Kiểm thử phản ánh cơ sở vật chất phòng thực hành kèm từ viết tắt (ko, đc).",
+    "illustrative_result": {
+      "label_id": 0,
+      "confidence": 0.8872,
+      "probabilities": {
+        "0": 0.8872,
+        "1": 0.0218,
+        "2": 0.0910
+      }
+    }
+  },
+  {
+    "sample_id": "SAMPLE_03_NEUTRAL_INFO",
+    "group_label": "3. Câu trung tính thông báo",
+    "text": "Học phần này có thời lượng 3 tín chỉ bao gồm 30 tiết lý thuyết và 30 tiết thực hành tại nhà C5.",
+    "suggested_unit": "ICTU",
+    "suggested_source": "LMS_FEEDBACK",
+    "suggested_topic": "CURRICULUM",
+    "note": "Kiểm thử câu thông tin mô tả khách quan không mang sắc thái khen/chê.",
+    "illustrative_result": {
+      "label_id": 1,
+      "confidence": 0.9332,
+      "probabilities": {
+        "0": 0.0218,
+        "1": 0.9332,
+        "2": 0.0450
+      }
+    }
+  },
+  {
+    "sample_id": "SAMPLE_04_SARCASM",
+    "group_label": "4. Câu có khả năng mỉa mai",
+    "text": "Hệ thống đăng ký tín chỉ mượt ghê cơ, quay mòng mòng từ 7h sáng tới trưa vẫn chưa vào được trang chủ :)))",
+    "suggested_unit": "TUEBA",
+    "suggested_source": "STUDENT_FORUM",
+    "suggested_topic": "FACILITY",
+    "note": "Kiểm thử câu khen ngược / mỉa mai kèm biểu cảm ':)))' (pipeline không tự ép ':)))' thành tiêu cực mà dựa trên ngữ cảnh câu).",
+    "illustrative_result": {
+      "label_id": 0,
+      "confidence": 0.8961,
+      "probabilities": {
+        "0": 0.8961,
+        "1": 0.0295,
+        "2": 0.0744
+      }
+    }
+  },
+  {
+    "sample_id": "SAMPLE_05_PII_MASKING",
+    "group_label": "5. Câu kiểm thử che thông tin cá nhân (dữ liệu giả)",
+    "text": "Em là sv mã số DTC990012345, sđt 0912345678, email sv.kiemthu.gia@example.edu.vn xin phản ánh lịch thi trùng ca sáng.",
+    "suggested_unit": "UNSPECIFIED",
+    "suggested_source": "QA_BOX",
+    "suggested_topic": "OTHER_SUPPORT",
+    "note": "Sử dụng hoàn toàn dữ liệu định danh giả định để kiểm thử bảo toàn các token <STUDENT_ID>, <PHONE>, <EMAIL>.",
+    "illustrative_result": {
+      "label_id": 1,
+      "confidence": 0.8805,
+      "probabilities": {
+        "0": 0.0848,
+        "1": 0.8805,
+        "2": 0.0347
+      }
+    }
+  },
+  {
+    "sample_id": "SAMPLE_06_MULTI_ASPECT",
+    "group_label": "6. Câu nhiều ý, vừa khen vừa chê",
+    "text": "Giảng viên dạy rất nhiệt tình nhưng máy chiếu phòng học mờ quá.",
+    "suggested_unit": "TNUE",
+    "suggested_source": "SURVEY_PORTAL",
+    "suggested_topic": "UNCLASSIFIED",
+    "note": "Ca kiểm thử câu đa khía cạnh (khen giảng viên, chê thiết bị). Không mặc định một nhãn chuẩn duy nhất nếu chưa có quy tắc gán nhãn khía cạnh.",
+    "illustrative_result": {
+      "label_id": 0,
+      "confidence": 0.8241,
+      "probabilities": {
+        "0": 0.8241,
+        "1": 0.0222,
+        "2": 0.1537
+      }
+    }
+  }
+]
+

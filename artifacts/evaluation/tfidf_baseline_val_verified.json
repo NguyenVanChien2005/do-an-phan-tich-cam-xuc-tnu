@@ -1,0 +1,294 @@
+{
+  "run_id": "tfidf-logreg-val-v1",
+  "task": "SENTIMENT",
+  "model_name": "TF-IDF + Logistic Regression (Baseline)",
+  "checkpoint_version": "sklearn-tfidf-lr-balanced-v1",
+  "dataset_version": "TNU_Sentiment_Dataset_Final_v1",
+  "split": "Validation",
+  "evaluation_set_id": "validation-sentiment-sha256-3b316430e855ddc6",
+  "metric_definition_version": "sklearn-multiclass-v1",
+  "n_samples": 1709,
+  "evaluated_at": "2026-11-06 10:19:29 +0700",
+  "result_source": "ARTIFACT_VERIFIED",
+  "accuracy": 0.9052,
+  "macro_precision": 0.8218,
+  "macro_recall": 0.8449,
+  "macro_f1": 0.8322,
+  "weighted_f1": 0.9067,
+  "per_class_metrics": [
+    {
+      "class_id": "0",
+      "class_name": "Tiêu cực (0)",
+      "precision": 0.9033,
+      "recall": 0.9275,
+      "f1": 0.9152,
+      "support": 745
+    },
+    {
+      "class_id": "1",
+      "class_name": "Trung tính (1)",
+      "precision": 0.6077,
+      "recall": 0.693,
+      "f1": 0.6475,
+      "support": 114
+    },
+    {
+      "class_id": "2",
+      "class_name": "Tích cực (2)",
+      "precision": 0.9545,
+      "recall": 0.9141,
+      "f1": 0.9339,
+      "support": 850
+    }
+  ],
+  "confusion_matrix_labels": [
+    "Tiêu cực (0)",
+    "Trung tính (1)",
+    "Tích cực (2)"
+  ],
+  "confusion_matrix": [
+    [
+      691,
+      29,
+      25
+    ],
+    [
+      23,
+      79,
+      12
+    ],
+    [
+      51,
+      22,
+      777
+    ]
+  ],
+  "error_cases": [
+    {
+      "sample_id": "VALIDATION-0940",
+      "masked_text": "cô dạy rất nhiệt tình , tận tâm và chu đáo .",
+      "true_label": "Tiêu cực (0)",
+      "predicted_label": "Tích cực (2)",
+      "confidence": 0.9954,
+      "error_category": "Ngữ nghĩa gián tiếp / Hàm ý",
+      "analysis_note": "Biểu đạt nhận xét gián tiếp hoặc từ vựng chuyên biệt trong học đường."
+    },
+    {
+      "sample_id": "VALIDATION-0813",
+      "masked_text": "thầy giảng bài rất tận tâm , dễ hiểu , nhưng tiết dạy kéo dài rất ngắn .",
+      "true_label": "Tiêu cực (0)",
+      "predicted_label": "Tích cực (2)",
+      "confidence": 0.948,
+      "error_category": "Câu đa ý / Tương phản",
+      "analysis_note": "Câu chứa mệnh đề khen - chê đan xen; mô hình phân loại toàn câu dễ nghiêng về vế sau."
+    },
+    {
+      "sample_id": "VALIDATION-0611",
+      "masked_text": "môn học rất khó hiểu .",
+      "true_label": "Trung tính (1)",
+      "predicted_label": "Tiêu cực (0)",
+      "confidence": 0.9319,
+      "error_category": "Ranh giới Trung tính",
+      "analysis_note": "Câu góp ý nhẹ hoặc thông báo thiếu từ khóa cảm xúc mạnh dễ nhầm giữa Trung tính và Tích cực/Tiêu cực."
+    },
+    {
+      "sample_id": "VALIDATION-1081",
+      "masked_text": "cách giảng cô rất phức tạp vẫn chưa ngắn gọn xúc tích gây khó hiểu ở các công thức tính toán .",
+      "true_label": "Tích cực (2)",
+      "predicted_label": "Tiêu cực (0)",
+      "confidence": 0.9259,
+      "error_category": "Ngữ nghĩa gián tiếp / Hàm ý",
+      "analysis_note": "Biểu đạt nhận xét gián tiếp hoặc từ vựng chuyên biệt trong học đường."
+    },
+    {
+      "sample_id": "VALIDATION-0986",
+      "masked_text": "sự nhiệt tình của cô .",
+      "true_label": "Trung tính (1)",
+      "predicted_label": "Tích cực (2)",
+      "confidence": 0.9172,
+      "error_category": "Ranh giới Trung tính",
+      "analysis_note": "Câu góp ý nhẹ hoặc thông báo thiếu từ khóa cảm xúc mạnh dễ nhầm giữa Trung tính và Tích cực/Tiêu cực."
+    },
+    {
+      "sample_id": "VALIDATION-0490",
+      "masked_text": "đôi lúc thầy \" chia sẻ \" hơi nhiều thời gian và việc học vào chương trình thì bị bớt lại nhưng điều này cũng không mấy ảnh hưởng gì .",
+      "true_label": "Trung tính (1)",
+      "predicted_label": "Tiêu cực (0)",
+      "confidence": 0.9034,
+      "error_category": "Câu đa ý / Tương phản",
+      "analysis_note": "Câu chứa mệnh đề khen - chê đan xen; mô hình phân loại toàn câu dễ nghiêng về vế sau."
+    },
+    {
+      "sample_id": "VALIDATION-0495",
+      "masked_text": "thầy rất nghiêm khắc .",
+      "true_label": "Tiêu cực (0)",
+      "predicted_label": "Tích cực (2)",
+      "confidence": 0.8873,
+      "error_category": "Ngữ cảnh ngắn",
+      "analysis_note": "Phản hồi rất ngắn, thiếu ngữ cảnh bổ trợ dẫn tới dự đoán lệch cực cảm xúc."
+    },
+    {
+      "sample_id": "VALIDATION-0856",
+      "masked_text": "nhanh .",
+      "true_label": "Trung tính (1)",
+      "predicted_label": "Tiêu cực (0)",
+      "confidence": 0.8784,
+      "error_category": "Ranh giới Trung tính",
+      "analysis_note": "Câu góp ý nhẹ hoặc thông báo thiếu từ khóa cảm xúc mạnh dễ nhầm giữa Trung tính và Tích cực/Tiêu cực."
+    },
+    {
+      "sample_id": "VALIDATION-1249",
+      "masked_text": "thời gian lên lớp ít nhưng tiếp thu nhiều .",
+      "true_label": "Tích cực (2)",
+      "predicted_label": "Tiêu cực (0)",
+      "confidence": 0.8672,
+      "error_category": "Câu đa ý / Tương phản",
+      "analysis_note": "Câu chứa mệnh đề khen - chê đan xen; mô hình phân loại toàn câu dễ nghiêng về vế sau."
+    },
+    {
+      "sample_id": "VALIDATION-0118",
+      "masked_text": "sự nhiệt tình .",
+      "true_label": "Trung tính (1)",
+      "predicted_label": "Tích cực (2)",
+      "confidence": 0.8586,
+      "error_category": "Ranh giới Trung tính",
+      "analysis_note": "Câu góp ý nhẹ hoặc thông báo thiếu từ khóa cảm xúc mạnh dễ nhầm giữa Trung tính và Tích cực/Tiêu cực."
+    },
+    {
+      "sample_id": "VALIDATION-0639",
+      "masked_text": "thầy chơi đểu em nhé , gọi em 2 lần làm em 1 con dấu nợ đấy !",
+      "true_label": "Tiêu cực (0)",
+      "predicted_label": "Trung tính (1)",
+      "confidence": 0.8567,
+      "error_category": "Ranh giới Trung tính",
+      "analysis_note": "Câu góp ý nhẹ hoặc thông báo thiếu từ khóa cảm xúc mạnh dễ nhầm giữa Trung tính và Tích cực/Tiêu cực."
+    },
+    {
+      "sample_id": "VALIDATION-0798",
+      "masked_text": "thực tiễn .",
+      "true_label": "Trung tính (1)",
+      "predicted_label": "Tích cực (2)",
+      "confidence": 0.8479,
+      "error_category": "Ranh giới Trung tính",
+      "analysis_note": "Câu góp ý nhẹ hoặc thông báo thiếu từ khóa cảm xúc mạnh dễ nhầm giữa Trung tính và Tích cực/Tiêu cực."
+    },
+    {
+      "sample_id": "VALIDATION-0689",
+      "masked_text": "thời gian trên lớp không hiệu quả .",
+      "true_label": "Tích cực (2)",
+      "predicted_label": "Tiêu cực (0)",
+      "confidence": 0.8384,
+      "error_category": "Ngữ nghĩa gián tiếp / Hàm ý",
+      "analysis_note": "Biểu đạt nhận xét gián tiếp hoặc từ vựng chuyên biệt trong học đường."
+    },
+    {
+      "sample_id": "VALIDATION-0702",
+      "masked_text": "thầy chỉ đọc trên slide , ít có giảng nội dung ngoài .",
+      "true_label": "Tích cực (2)",
+      "predicted_label": "Tiêu cực (0)",
+      "confidence": 0.8362,
+      "error_category": "Ngữ nghĩa gián tiếp / Hàm ý",
+      "analysis_note": "Biểu đạt nhận xét gián tiếp hoặc từ vựng chuyên biệt trong học đường."
+    },
+    {
+      "sample_id": "VALIDATION-0320",
+      "masked_text": "ôn kiến thức bằng cách chơi trò chơi .",
+      "true_label": "Tích cực (2)",
+      "predicted_label": "Trung tính (1)",
+      "confidence": 0.8266,
+      "error_category": "Ranh giới Trung tính",
+      "analysis_note": "Câu góp ý nhẹ hoặc thông báo thiếu từ khóa cảm xúc mạnh dễ nhầm giữa Trung tính và Tích cực/Tiêu cực."
+    },
+    {
+      "sample_id": "VALIDATION-0939",
+      "masked_text": "môn tốt nghiệp mà thấy chỉ cho các nhóm thuyết trình xong điểm danh , thầy còn không ý kiến về cả bài thuyết trình .",
+      "true_label": "Tiêu cực (0)",
+      "predicted_label": "Trung tính (1)",
+      "confidence": 0.811,
+      "error_category": "Ranh giới Trung tính",
+      "analysis_note": "Câu góp ý nhẹ hoặc thông báo thiếu từ khóa cảm xúc mạnh dễ nhầm giữa Trung tính và Tích cực/Tiêu cực."
+    },
+    {
+      "sample_id": "VALIDATION-0719",
+      "masked_text": "giáo viên không đến lớp bữa nào nên em không biết nhận xét .",
+      "true_label": "Trung tính (1)",
+      "predicted_label": "Tiêu cực (0)",
+      "confidence": 0.8109,
+      "error_category": "Ranh giới Trung tính",
+      "analysis_note": "Câu góp ý nhẹ hoặc thông báo thiếu từ khóa cảm xúc mạnh dễ nhầm giữa Trung tính và Tích cực/Tiêu cực."
+    },
+    {
+      "sample_id": "VALIDATION-1302",
+      "masked_text": "không hài lòng điểm gì cả !",
+      "true_label": "Tiêu cực (0)",
+      "predicted_label": "Trung tính (1)",
+      "confidence": 0.806,
+      "error_category": "Ranh giới Trung tính",
+      "analysis_note": "Câu góp ý nhẹ hoặc thông báo thiếu từ khóa cảm xúc mạnh dễ nhầm giữa Trung tính và Tích cực/Tiêu cực."
+    },
+    {
+      "sample_id": "VALIDATION-0122",
+      "masked_text": "cô có tổ chức một hoạt động về anh văn nhưng em thấy chưa thực sự có hiệu quả ( đó là ý kiến cá nhân của em ) .",
+      "true_label": "Tiêu cực (0)",
+      "predicted_label": "Trung tính (1)",
+      "confidence": 0.8007,
+      "error_category": "Câu đa ý / Tương phản",
+      "analysis_note": "Câu chứa mệnh đề khen - chê đan xen; mô hình phân loại toàn câu dễ nghiêng về vế sau."
+    },
+    {
+      "sample_id": "VALIDATION-1069",
+      "masked_text": "phân chia chương trình hợp lý hơn , chia nhỏ lượng kiến thức cần đạt được .",
+      "true_label": "Tích cực (2)",
+      "predicted_label": "Tiêu cực (0)",
+      "confidence": 0.7932,
+      "error_category": "Ngữ nghĩa gián tiếp / Hàm ý",
+      "analysis_note": "Biểu đạt nhận xét gián tiếp hoặc từ vựng chuyên biệt trong học đường."
+    },
+    {
+      "sample_id": "VALIDATION-1281",
+      "masked_text": "cảm ơn thầy rất nhiều .",
+      "true_label": "Trung tính (1)",
+      "predicted_label": "Tích cực (2)",
+      "confidence": 0.7929,
+      "error_category": "Ranh giới Trung tính",
+      "analysis_note": "Câu góp ý nhẹ hoặc thông báo thiếu từ khóa cảm xúc mạnh dễ nhầm giữa Trung tính và Tích cực/Tiêu cực."
+    },
+    {
+      "sample_id": "VALIDATION-0180",
+      "masked_text": "có thể tổ chức các buổi seminar nhằm kích thích sinh viên tìm hiểu thêm và ứng dụng tốt hơn môn học này vào thực tiễn .",
+      "true_label": "Tích cực (2)",
+      "predicted_label": "Tiêu cực (0)",
+      "confidence": 0.7665,
+      "error_category": "Ngữ nghĩa gián tiếp / Hàm ý",
+      "analysis_note": "Biểu đạt nhận xét gián tiếp hoặc từ vựng chuyên biệt trong học đường."
+    },
+    {
+      "sample_id": "VALIDATION-0760",
+      "masked_text": "không có đề cương trên khoá học .",
+      "true_label": "Tiêu cực (0)",
+      "predicted_label": "Trung tính (1)",
+      "confidence": 0.7524,
+      "error_category": "Ranh giới Trung tính",
+      "analysis_note": "Câu góp ý nhẹ hoặc thông báo thiếu từ khóa cảm xúc mạnh dễ nhầm giữa Trung tính và Tích cực/Tiêu cực."
+    },
+    {
+      "sample_id": "VALIDATION-1475",
+      "masked_text": "dãy bàn chính giữa không có quạt .",
+      "true_label": "Tiêu cực (0)",
+      "predicted_label": "Trung tính (1)",
+      "confidence": 0.7518,
+      "error_category": "Ranh giới Trung tính",
+      "analysis_note": "Câu góp ý nhẹ hoặc thông báo thiếu từ khóa cảm xúc mạnh dễ nhầm giữa Trung tính và Tích cực/Tiêu cực."
+    },
+    {
+      "sample_id": "VALIDATION-1255",
+      "masked_text": "thầy có kiến thức nhiều .",
+      "true_label": "Trung tính (1)",
+      "predicted_label": "Tích cực (2)",
+      "confidence": 0.7378,
+      "error_category": "Ranh giới Trung tính",
+      "analysis_note": "Câu góp ý nhẹ hoặc thông báo thiếu từ khóa cảm xúc mạnh dễ nhầm giữa Trung tính và Tích cực/Tiêu cực."
+    }
+  ],
+  "notes": "Mô hình cơ sở (Baseline) huấn luyện trên tnu_train_final.csv, đánh giá cùng tập tnu_val_final.csv."
+}

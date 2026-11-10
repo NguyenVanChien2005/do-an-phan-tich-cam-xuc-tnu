@@ -1,0 +1,27 @@
+# Môi trường ảo Python
+.venv/
+venv/
+env/
+ENV/
+
+# Bộ nhớ đệm Python & Kiểm thử
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Biến môi trường chứa thông tin nhạy cảm (giữ lại .env.example)
+.env
+.env.local
+
+# Trọng số mô hình dung lượng lớn (> 100 MB giới hạn mặc định của GitHub)
+# Giữ lại config.json, tokenizer_config.json, vocab.txt, bpe.codes để đối chiếu kiến trúc
+*.safetensors
+pytorch_model.bin
+
+# Tệp hệ điều hành & IDE tạm
+.DS_Store
+Thumbs.db
+*.log

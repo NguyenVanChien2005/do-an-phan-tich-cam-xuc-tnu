@@ -1,0 +1,79 @@
+[
+  {
+    "run_id": "demo-topic-tfidf-val-illustrative",
+    "task": "TOPIC",
+    "model_name": "TF-IDF + LinearSVC (Minh họa chủ đề Demo)",
+    "checkpoint_version": "demo-topic-fixture-v1",
+    "dataset_version": "DEMO_ILLUSTRATIVE_SET",
+    "split": "Validation",
+    "evaluation_set_id": "demo-topic-val-fixture-400",
+    "metric_definition_version": "sklearn-multiclass-v1",
+    "n_samples": 400,
+    "evaluated_at": "2026-10-20 10:00:00 +0700",
+    "result_source": "DEMO_FIXTURE",
+    "accuracy": 0.8425,
+    "macro_precision": 0.8012,
+    "macro_recall": 0.7865,
+    "macro_f1": 0.7928,
+    "weighted_f1": 0.8410,
+    "per_class_metrics": [
+      {
+        "class_id": "LECTURER",
+        "class_name": "Giảng viên & Phương pháp giảng dạy",
+        "precision": 0.8920,
+        "recall": 0.9100,
+        "f1": 0.9009,
+        "support": 220
+      },
+      {
+        "class_id": "CURRICULUM",
+        "class_name": "Chương trình đào tạo & Học phần",
+        "precision": 0.8105,
+        "recall": 0.7900,
+        "f1": 0.8001,
+        "support": 90
+      },
+      {
+        "class_id": "FACILITY",
+        "class_name": "Cơ sở vật chất & Hạ tầng CNTT",
+        "precision": 0.7850,
+        "recall": 0.7600,
+        "f1": 0.7723,
+        "support": 50
+      },
+      {
+        "class_id": "OTHER_SUPPORT",
+        "class_name": "Công tác sinh viên & Dịch vụ khác",
+        "precision": 0.7173,
+        "recall": 0.6860,
+        "f1": 0.7013,
+        "support": 40
+      }
+    ],
+    "confusion_matrix_labels": [
+      "LECTURER",
+      "CURRICULUM",
+      "FACILITY",
+      "OTHER_SUPPORT"
+    ],
+    "confusion_matrix": [
+      [200, 12, 3, 5],
+      [13, 71, 3, 3],
+      [4, 5, 38, 3],
+      [7, 4, 2, 27]
+    ],
+    "error_cases": [
+      {
+        "sample_id": "DEMO-TOPIC-ERR-01",
+        "masked_text": "Thầy giảng phần thực hành hay nhưng phòng lab thiếu thiết bị mạng để chia nhóm.",
+        "true_label": "FACILITY",
+        "predicted_label": "LECTURER",
+        "confidence": null,
+        "error_category": "Giao thoa nhiều chủ đề",
+        "analysis_note": "Dữ liệu minh họa chế độ Demo: câu đồng thời nhắc tới giảng viên và thiết bị phòng lab."
+      }
+    ],
+    "notes": "Dữ liệu minh họa giao diện cho tác vụ Chủ đề (TOPIC) trong chế độ Demo — không phải checkpoint đang triển khai."
+  }
+]
+
