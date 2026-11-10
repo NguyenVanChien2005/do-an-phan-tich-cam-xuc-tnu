@@ -1,0 +1,6 @@
+model_name,evaluation_split,n_samples,accuracy_pct,macro_precision_pct,macro_recall_pct,macro_f1_pct,weighted_f1_pct,f1_negative_pct,f1_neutral_pct,f1_positive_pct,notes
+Naive Bayes + TF-IDF,Test (3.166),3166,86.83,59.01,60.00,59.45,84.51,89.93,0.00,88.41,"Do lớp Trung tính (Neutral) chỉ chiếm 4,32% tập dữ liệu, Naive Bayes không học được ranh giới quyết định của lớp này (Recall-Neutral = 0,00%, F1-Neutral = 0,00%)"
+Maximum Entropy + TF-IDF,Test (3.166),3166,89.17,78.61,63.34,64.99,87.28,91.54,12.09,91.34,"Bị hai lớp đa số lấn át khiến F1-Neutral chỉ đạt 12,09% trên tập Test"
+Linear SVM (Balanced) + TF-IDF,Test (3.166),3166,89.29,72.89,74.01,73.41,88.85,91.89,36.75,91.58,"Áp dụng cân bằng trọng số lớp (class_weight='balanced') giúp F1-Neutral tăng gấp hơn 3 lần lên 36,75% (Macro-F1 đạt 73,41%)"
+PhoBERT-base-v2 + Focal Loss (Đợt 1),Test (3.166),3166,93.78,84.12,81.95,82.91,93.46,95.23,57.86,95.63,"Đánh giá độc lập trên Tập Kiểm thử chuẩn UIT-VSFC (N = 3.166 mẫu)"
+PhoBERT-base-v2 + Focal Loss (Đợt 2 - Đỉnh Epoch 4),Validation (1.709),1709,95.61,91.17,91.10,91.13,95.57,96.74,80.00,96.65,"Tinh chỉnh sâu trên Tập Phát triển mở rộng (1.583 UIT-VSFC Val + 126 mẫu miền ĐHTN); EarlyStopping dừng tại Epoch 10, trích xuất checkpoint tốt nhất tại Epoch 4"

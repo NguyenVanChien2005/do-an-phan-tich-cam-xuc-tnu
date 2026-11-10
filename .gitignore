@@ -12,14 +12,16 @@ __pycache__/
 .coverage
 htmlcov/
 
-# Biến môi trường chứa thông tin nhạy cảm (giữ lại .env.example)
+# Biến môi trường chứa mật khẩu thật, khóa API và SECRET_SALT (chỉ giữ lại .env.example)
 .env
 .env.local
+.env.*.local
 
-# Trọng số mô hình dung lượng lớn (> 100 MB giới hạn mặc định của GitHub)
-# Giữ lại config.json, tokenizer_config.json, vocab.txt, bpe.codes để đối chiếu kiến trúc
+# Chặn đẩy các tệp trọng số mô hình dung lượng lớn lên Git
 *.safetensors
-pytorch_model.bin
+*.bin
+*.pt
+*.pth
 
 # Tệp hệ điều hành & IDE tạm
 .DS_Store
