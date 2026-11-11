@@ -1,20 +1,28 @@
 """Ứng dụng Web Streamlit + Plotly + SQLAlchemy hoàn chỉnh 4 phân hệ — TNU Sentiment.
 
-Đề tài: Hệ thống thu thập và phân tích cảm xúc từ ý kiến đánh giá của cộng đồng trong Đại học Thái Nguyên
-Sinh viên thực hiện: Nguyễn Văn Chiến - MSSV: DTC235200079 - Lớp: CN CNTT K22A (ICTU)
-Giảng viên hướng dẫn: TS. Hà Thị Thanh
+Hệ thống thu thập và phân tích cảm xúc từ ý kiến đánh giá của cộng đồng trong Đại học Thái Nguyên.
+Hệ thống Phân tích Ngôn ngữ Tự nhiên (PhoBERT-v2) & Giám sát Chất lượng Đào tạo Thời gian thực.
 """
 
 from __future__ import annotations
 
+import hashlib
 import html
+import importlib
 import io
 import os
+import sys
 import time
 from datetime import date, datetime, time as dt_time, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import quote_plus
+from zoneinfo import ZoneInfo
+
+PROJECT_ROOT = Path(__file__).resolve().parent
+for _candidate_path in (str(PROJECT_ROOT), str(PROJECT_ROOT / "src")):
+    if _candidate_path not in sys.path:
+        sys.path.insert(0, _candidate_path)
 
 import numpy as np
 import pandas as pd
@@ -34,8 +42,19 @@ from src.llm_fallback import (
     is_gemini_configured,
 )
 from src.preprocessor import TNUStudentFeedbackPreprocessor
+import tnu_sentiment.services.analysis_service as _analysis_service_mod
+import tnu_sentiment.services.import_service as _import_service_mod
 
-PROJECT_ROOT = Path(__file__).resolve().parent
+if not hasattr(_analysis_service_mod, "compute_text_signature"):
+    _analysis_service_mod = importlib.reload(_analysis_service_mod)
+if not hasattr(_import_service_mod, "VN_TZ") or not hasattr(
+    _import_service_mod, "parse_feedback_datetime"
+):
+    _import_service_mod = importlib.reload(_import_service_mod)
+
+from tnu_sentiment.services.analysis_service import compute_text_signature
+from tnu_sentiment.services.import_service import VN_TZ, parse_feedback_datetime
+
 load_dotenv(PROJECT_ROOT / ".env", override=False)
 
 # ==============================================================================
@@ -77,6 +96,17 @@ TNU_UNITS: Dict[int, Tuple[str, str]] = {
     8: ("SFL", "Trường Ngoại ngữ (SFL)"),
     9: ("ISTNU", "Khoa Quốc tế (ISTNU)"),
 }
+TNU_UNITS_SHORT: Dict[int, str] = {
+    1: "ICTU — ĐH CNTT & TT",
+    2: "TNUT — ĐH Kỹ thuật Công nghiệp",
+    3: "TUEBA — ĐH Kinh tế & QTKD",
+    4: "TNUE — ĐH Sư phạm",
+    5: "TUAF — ĐH Nông Lâm",
+    6: "TUMP — ĐH Y Dược",
+    7: "TNUS — ĐH Khoa học",
+    8: "SFL — Trường Ngoại ngữ",
+    9: "ISTNU — Khoa Quốc tế",
+}
 UNIT_CODE_TO_ID: Dict[str, int] = {code: uid for uid, (code, _) in TNU_UNITS.items()}
 
 DATA_SOURCES: Dict[int, str] = {
@@ -84,6 +114,9 @@ DATA_SOURCES: Dict[int, str] = {
     2: "Hệ thống quản lý học tập trực tuyến (LMS)",
     3: "Diễn đàn & Fanpage cộng đồng sinh viên ĐHTN",
     4: "Hòm thư góp ý trực tuyến & Import CSV/XLSX",
+    5: "Bình luận Fanpage / Hội nhóm Facebook",
+    6: "Bình luận kênh YouTube",
+    7: "Bình luận bài viết / Bản tin điện tử",
 }
 SOURCE_NAME_TO_ID: Dict[str, int] = {
     "SURVEY_PORTAL": 1,
@@ -94,6 +127,9 @@ SOURCE_NAME_TO_ID: Dict[str, int] = {
     "QA_IMPORT_BOX": 4,
     "QA_BOX": 4,
     "CSV_IMPORT": 4,
+    "FACEBOOK": 5,
+    "YOUTUBE": 6,
+    "NEWS_COMMENT": 7,
 }
 
 # 6 câu mẫu kiểm thử điển hình phục vụ Tab 1 (Live AI Sandbox)
@@ -118,8 +154,8 @@ SAMPLE_TEST_CASES: Dict[str, Dict[str, Any]] = {
         "unit_code": "TUEBA",
         "source_id": 3,
     },
-    "5. Câu chứa PII (Mã SV DTC235200079 / SĐT / Email)": {
-        "text": "Em là sv mã số DTC235200079, sđt 0912345678, email chien.ictu@tnu.edu.vn xin phản ánh lịch thi trùng ca sáng.",
+    "5. Câu chứa PII (Mã SV / SĐT / Email)": {
+        "text": "Em là sv mã số DTC202600123, sđt 0912345678, email sinhvien@tnu.edu.vn xin phản ánh lịch thi trùng ca sáng.",
         "unit_code": "ICTU",
         "source_id": 4,
     },
@@ -141,20 +177,31 @@ def get_preprocessor() -> TNUStudentFeedbackPreprocessor:
 
 def _resolve_checkpoint_path() -> Optional[Path]:
     """Kiểm tra sự tồn tại của checkpoint đã tinh chỉnh tại các đường dẫn chuẩn."""
-    env_dir = os.getenv("SENTIMENT_CHECKPOINT_DIR", "").strip()
-    candidates: List[Path] = []
-    if env_dir:
+    if "SENTIMENT_CHECKPOINT_DIR" in os.environ:
+        env_dir = os.environ["SENTIMENT_CHECKPOINT_DIR"].strip()
+        if not env_dir or env_dir.upper() == "DISABLED":
+            return None
         p_env = Path(env_dir)
-        candidates.append(p_env if p_env.is_absolute() else (PROJECT_ROOT / p_env))
-    candidates.extend(
-        [
-            PROJECT_ROOT / "phobert_tnu_best_model",
-            PROJECT_ROOT / "models" / "phobert_tnu_sentiment",
-            PROJECT_ROOT
-            / "phobert_tnu_best_model-20261101T002214Z-1-001"
-            / "phobert_tnu_best_model",
-        ]
-    )
+        cand_env = p_env if p_env.is_absolute() else (PROJECT_ROOT / p_env)
+        if (
+            cand_env.exists()
+            and cand_env.is_dir()
+            and (cand_env / "config.json").exists()
+            and (
+                (cand_env / "model.safetensors").exists()
+                or (cand_env / "pytorch_model.bin").exists()
+            )
+        ):
+            return cand_env
+        return None
+
+    candidates: List[Path] = [
+        PROJECT_ROOT / "phobert_tnu_best_model",
+        PROJECT_ROOT / "models" / "phobert_tnu_sentiment",
+        PROJECT_ROOT
+        / "phobert_tnu_best_model-20261101T002214Z-1-001"
+        / "phobert_tnu_best_model",
+    ]
     for cand in candidates:
         if (
             cand.exists()
@@ -358,6 +405,138 @@ def predict_feedback_sentiment_and_topic(
     }
 
 
+def predict_feedback_batch(
+    raw_texts: List[str],
+    preprocessor: TNUStudentFeedbackPreprocessor,
+    model_bundle: Dict[str, Any],
+    batch_size: int = 32,
+) -> List[Dict[str, Any]]:
+    """Suy luận theo lô (batched inference với batch_size = 32):
+    Tokenize theo lô và chạy model(**batch_inputs) trong 1 forward pass cho mỗi lô 32 câu.
+    """
+    if not raw_texts:
+        return []
+    safe_batch = max(1, int(batch_size))
+    results: List[Dict[str, Any]] = []
+
+    for start in range(0, len(raw_texts), safe_batch):
+        chunk_raw = raw_texts[start : start + safe_batch]
+        t0 = time.perf_counter()
+
+        chunk_steps = [preprocessor.preprocess_with_steps(t) for t in chunk_raw]
+        chunk_proc = [preprocessor.preprocess(t) for t in chunk_raw]
+        chunk_masked = [s["step1_nfc_pii"] for s in chunk_steps]
+        chunk_hashes = [preprocessor.compute_content_hash(t) for t in chunk_raw]
+
+        if model_bundle.get("is_finetuned") and model_bundle.get("model") is not None:
+            torch = model_bundle["torch"]
+            tokenizer = model_bundle["tokenizer"]
+            model = model_bundle["model"]
+            device = model_bundle["device"]
+
+            batch_inputs = tokenizer(
+                chunk_proc,
+                truncation=True,
+                padding=True,
+                max_length=128,
+                return_tensors="pt",
+            )
+            batch_inputs = {k: v.to(device) for k, v in batch_inputs.items()}
+            with torch.no_grad():
+                outputs = model(**batch_inputs)
+                probs_batch = (
+                    torch.softmax(outputs.logits, dim=-1).detach().cpu().tolist()
+                )
+        else:
+            probs_batch = []
+            pos_cues = (
+                "tích_cực",
+                "nhiệt_tình",
+                "tận_tâm",
+                "dễ hiểu",
+                "tốt",
+                "hay",
+                "vui_tính",
+            )
+            neg_cues = (
+                "tiêu_cực",
+                "hỏng",
+                "mờ",
+                "chập_chờn",
+                "nóng",
+                "quay mòng",
+                "chậm",
+                "kém",
+                "không hiểu",
+            )
+            for p_txt in chunk_proc:
+                lowered = p_txt.lower()
+                p_score = sum(1 for w in pos_cues if w in lowered)
+                n_score = sum(1 for w in neg_cues if w in lowered)
+                if n_score > p_score:
+                    probs_batch.append([0.84, 0.08, 0.08])
+                elif p_score > n_score:
+                    probs_batch.append([0.06, 0.08, 0.86])
+                else:
+                    probs_batch.append([0.12, 0.76, 0.12])
+
+        per_item_ms = round(
+            ((time.perf_counter() - t0) * 1000.0) / max(1, len(chunk_raw)), 2
+        )
+
+        for idx, probs in enumerate(probs_batch):
+            prob_neg, prob_neu, prob_pos = (
+                round(float(probs[0]), 4),
+                round(float(probs[1]), 4),
+                round(float(probs[2]), 4),
+            )
+            pred_label = int(np.argmax(probs))
+            confidence = float(probs[pred_label])
+            processed_text = chunk_proc[idx]
+            masked_text = chunk_masked[idx]
+
+            topic_id, topic_name, topic_router_src = infer_topic_by_keywords(
+                processed_text
+            )
+            review_status = "AUTO_APPROVED"
+            router_info: Optional[Dict[str, Any]] = None
+            if confidence < 0.65:
+                review_status = "NEEDS_REVIEW"
+                router_info = call_gemini_LowConfidence_router(
+                    masked_text=masked_text,
+                    phobert_label=pred_label,
+                    phobert_confidence=confidence,
+                )
+                topic_id = int(router_info["suggested_topic_id"])
+                topic_name = str(router_info["suggested_topic_name"])
+                topic_router_src = str(router_info["router_mode"])
+
+            results.append(
+                {
+                    "raw_content": masked_text,
+                    "processed_content": processed_text,
+                    "steps": chunk_steps[idx],
+                    "content_hash": chunk_hashes[idx],
+                    "sentiment_label": pred_label,
+                    "sentiment_text": SENTIMENT_ID_TO_TEXT[pred_label],
+                    "sentiment_vi": SENTIMENT_ID_TO_VI[pred_label],
+                    "confidence_score": round(confidence, 4),
+                    "prob_negative": prob_neg,
+                    "prob_neutral": prob_neu,
+                    "prob_positive": prob_pos,
+                    "topic_id": topic_id,
+                    "topic_name": topic_name,
+                    "topic_router_source": topic_router_src,
+                    "review_status": review_status,
+                    "router_info": router_info,
+                    "model_used": model_bundle["model_name"],
+                    "latency_ms": per_item_ms,
+                }
+            )
+
+    return results
+
+
 # ==============================================================================
 # 4. TẦNG DỮ LIỆU ĐỒNG BỘ MYSQL 8.0 (KHOẢNG NỬA MỞ TỐI ƯU B-TREE INDEX) & CSV FALLBACK
 # ==============================================================================
@@ -463,9 +642,9 @@ def query_filtered_feedbacks(
         params: Dict[str, Any] = {"start_dt": start_dt, "end_dt": end_dt}
         expanding_params = []
 
-        if data_mode == "Chỉ dữ liệu thực tế (is_synthetic = 0)":
+        if data_mode in ("Dữ liệu thực tế", "Chỉ dữ liệu thực tế (is_synthetic = 0)"):
             clauses.append("f.is_synthetic = 0")
-        elif data_mode == "Dữ liệu Seed Demo (is_synthetic = 1)":
+        elif data_mode in ("Dữ liệu Seed Demo", "Dữ liệu Seed Demo (is_synthetic = 1)"):
             clauses.append("f.is_synthetic = 1")
 
         if selected_unit_ids:
@@ -534,9 +713,9 @@ def query_filtered_feedbacks(
     mask = (base_df["feedback_date"] >= pd.Timestamp(start_dt)) & (
         base_df["feedback_date"] < pd.Timestamp(end_dt)
     )
-    if data_mode == "Chỉ dữ liệu thực tế (is_synthetic = 0)":
+    if data_mode in ("Dữ liệu thực tế", "Chỉ dữ liệu thực tế (is_synthetic = 0)"):
         mask &= base_df["is_synthetic"] == 0
-    elif data_mode == "Dữ liệu Seed Demo (is_synthetic = 1)":
+    elif data_mode in ("Dữ liệu Seed Demo", "Dữ liệu Seed Demo (is_synthetic = 1)"):
         mask &= base_df["is_synthetic"] == 1
 
     if selected_unit_ids:
@@ -558,6 +737,7 @@ def save_feedback_record(
     source_id: int,
     is_synthetic: int = 0,
     feedback_dt: Optional[datetime] = None,
+    allow_overwrite: bool = False,
 ) -> Tuple[bool, str]:
     """Lưu bản ghi phản hồi mới và kiểm tra content_hash chống trùng lặp tuyệt đối."""
     fb_time = feedback_dt or datetime.now()
@@ -585,48 +765,101 @@ def save_feedback_record(
             )
             """
         )
+        upd_stmt = text(
+            """
+            UPDATE student_feedbacks
+            SET author_hash = :author_hash,
+                unit_id = :unit_id,
+                source_id = :source_id,
+                topic_id = :topic_id,
+                raw_content = :raw_content,
+                processed_content = :processed_content,
+                sentiment_label = :sentiment_label,
+                sentiment_text = :sentiment_text,
+                confidence_score = :confidence_score,
+                prob_negative = :prob_negative,
+                prob_neutral = :prob_neutral,
+                prob_positive = :prob_positive,
+                model_used = :model_used,
+                latency_ms = :latency_ms,
+                is_synthetic = :is_synthetic,
+                review_status = :review_status,
+                feedback_date = :feedback_date
+            WHERE content_hash = :content_hash
+            """
+        )
+        payload = {
+            "content_hash": c_hash,
+            "author_hash": a_hash,
+            "unit_id": unit_id,
+            "source_id": source_id,
+            "topic_id": result["topic_id"],
+            "raw_content": result["raw_content"],
+            "processed_content": result["processed_content"],
+            "sentiment_label": result["sentiment_label"],
+            "sentiment_text": result["sentiment_text"],
+            "confidence_score": result["confidence_score"],
+            "prob_negative": result["prob_negative"],
+            "prob_neutral": result["prob_neutral"],
+            "prob_positive": result["prob_positive"],
+            "model_used": result["model_used"],
+            "latency_ms": result["latency_ms"],
+            "is_synthetic": is_synthetic,
+            "review_status": result["review_status"],
+            "feedback_date": fb_time,
+        }
         with engine.begin() as conn:
             exists = conn.execute(check_stmt, {"c_hash": c_hash}).fetchone()
             if exists is not None:
+                if allow_overwrite:
+                    conn.execute(upd_stmt, payload)
+                    return (
+                        True,
+                        f"Đã cập nhật ghi đè bản ghi vào MySQL 8.0 (content_hash: {c_hash[:12]}...).",
+                    )
                 return (
                     False,
                     f"Bản ghi bị chặn do trùng mã băm SHA-256 (content_hash = {c_hash[:12]}... đã tồn tại).",
                 )
-            conn.execute(
-                ins_stmt,
-                {
-                    "content_hash": c_hash,
-                    "author_hash": a_hash,
-                    "unit_id": unit_id,
-                    "source_id": source_id,
-                    "topic_id": result["topic_id"],
-                    "raw_content": result["raw_content"],
-                    "processed_content": result["processed_content"],
-                    "sentiment_label": result["sentiment_label"],
-                    "sentiment_text": result["sentiment_text"],
-                    "confidence_score": result["confidence_score"],
-                    "prob_negative": result["prob_negative"],
-                    "prob_neutral": result["prob_neutral"],
-                    "prob_positive": result["prob_positive"],
-                    "model_used": result["model_used"],
-                    "latency_ms": result["latency_ms"],
-                    "is_synthetic": is_synthetic,
-                    "review_status": result["review_status"],
-                    "feedback_date": fb_time,
-                },
-            )
+            conn.execute(ins_stmt, payload)
         return True, f"Đã lưu phản hồi thành công vào MySQL 8.0 (content_hash: {c_hash[:12]}...)."
 
     # Lưu trong bộ nhớ phiên khi ở CSV Fallback Mode
     df = _load_offline_seed_dataframe(preprocessor)
+    u_code, u_name = TNU_UNITS.get(unit_id, ("ICTU", "ICTU"))
     if c_hash in set(df["content_hash"].astype(str)):
+        if allow_overwrite:
+            mask = df["content_hash"].astype(str) == c_hash
+            df.loc[mask, "unit_id"] = unit_id
+            df.loc[mask, "unit_code"] = u_code
+            df.loc[mask, "unit_name"] = u_name
+            df.loc[mask, "source_id"] = source_id
+            df.loc[mask, "source_name"] = DATA_SOURCES.get(source_id, "Khảo sát")
+            df.loc[mask, "topic_id"] = result["topic_id"]
+            df.loc[mask, "topic_name"] = TOPIC_ID_TO_NAME.get(result["topic_id"], "Khác")
+            df.loc[mask, "raw_content"] = result["raw_content"]
+            df.loc[mask, "processed_content"] = result["processed_content"]
+            df.loc[mask, "sentiment_label"] = result["sentiment_label"]
+            df.loc[mask, "sentiment_text"] = result["sentiment_text"]
+            df.loc[mask, "confidence_score"] = result["confidence_score"]
+            df.loc[mask, "prob_negative"] = result["prob_negative"]
+            df.loc[mask, "prob_neutral"] = result["prob_neutral"]
+            df.loc[mask, "prob_positive"] = result["prob_positive"]
+            df.loc[mask, "model_used"] = result["model_used"]
+            df.loc[mask, "is_synthetic"] = is_synthetic
+            df.loc[mask, "review_status"] = result["review_status"]
+            df.loc[mask, "feedback_date"] = pd.Timestamp(fb_time)
+            st.session_state["offline_feedbacks_df"] = df
+            return (
+                True,
+                f"Đã cập nhật ghi đè bản ghi trong bộ nhớ phiên CSV Fallback (content_hash: {c_hash[:12]}...).",
+            )
         return (
             False,
             f"Bản ghi bị chặn do trùng mã băm SHA-256 (content_hash = {c_hash[:12]}... đã tồn tại trong phiên).",
         )
 
     next_id = int(df["feedback_id"].max()) + 1 if not df.empty else 1
-    u_code, u_name = TNU_UNITS.get(unit_id, ("ICTU", "ICTU"))
     new_row = pd.DataFrame(
         [
             {
@@ -746,20 +979,59 @@ def inject_enterprise_css() -> None:
                 margin-bottom: 0.5rem;
                 font-size: 0.86rem;
             }}
+            div[data-testid="stMetricValue"] {{
+                font-size: 1.35rem !important;
+                white-space: normal !important;
+                overflow: visible !important;
+                text-overflow: unset !important;
+                line-height: 1.3 !important;
+            }}
+            div[data-testid="stMetricLabel"] {{
+                white-space: normal !important;
+            }}
+            button[data-baseweb="tab"] p {{
+                font-weight: 600 !important;
+                font-size: 0.95rem !important;
+            }}
+            span[data-baseweb="tag"] {{
+                max-width: 100% !important;
+                height: auto !important;
+                white-space: normal !important;
+                padding-top: 2px !important;
+                padding-bottom: 2px !important;
+            }}
+            span[data-baseweb="tag"] span {{
+                max-width: 100% !important;
+                white-space: normal !important;
+                overflow: visible !important;
+                text-overflow: unset !important;
+                line-height: 1.3 !important;
+            }}
         </style>
         """,
         unsafe_allow_html=True,
     )
 
 
-def style_plotly(fig: go.Figure, title: str, height: int = 340) -> go.Figure:
+def style_plotly(fig: go.Figure, title: Optional[str] = None, height: int = 360) -> go.Figure:
     fig.update_layout(
-        title=dict(text=title, font=dict(size=15, color=PALETTE["text"]), x=0.0),
+        title=None,
         height=height,
         paper_bgcolor=PALETTE["surface"],
         plot_bgcolor=PALETTE["surface"],
-        margin=dict(l=16, r=16, t=48, b=28),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1.0),
+        xaxis_title=None,
+        yaxis_title=None,
+        legend_title_text="",
+        margin=dict(t=35, b=30, l=10, r=10),
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1.0,
+            title_text="",
+            bgcolor="rgba(255,255,255,0.8)",
+        ),
     )
     return fig
 
@@ -797,7 +1069,7 @@ def main() -> None:
         f"""
         <div class="tnu-top-banner">
             <h1>🏛️ TNU SENTIMENT — HỆ THỐNG PHÂN TÍCH CẢM XÚC Ý KIẾN PHẢN HỒI ĐẠI HỌC THÁI NGUYÊN</h1>
-            <p>Sinh viên thực hiện: <strong>Nguyễn Văn Chiến</strong> (MSSV: <code>DTC235200079</code> · Lớp: CN CNTT K22A — ICTU) · Giảng viên hướng dẫn: <strong>TS. Hà Thị Thanh</strong></p>
+            <p>Hệ thống Phân tích Ngôn ngữ Tự nhiên (PhoBERT-v2) &amp; Giám sát Chất lượng Đào tạo Thời gian thực</p>
             <div class="tnu-status-strip">
                 <span class="tnu-status-pill">CSDL: {html.escape(db_status)}</span>
                 <span class="tnu-status-pill">Model Cảm xúc: {html.escape(model_bundle['sentiment_status'])}</span>
@@ -812,28 +1084,29 @@ def main() -> None:
     # SIDEBAR: BỘ LỌC TOÀN CỤC CHO DASHBOARD & QUẢN LÝ DỮ LIỆU
     # --------------------------------------------------------------------------
     st.sidebar.markdown("### 🎛️ Bộ lọc Giám sát Toàn ĐHTN")
-    data_mode = st.sidebar.radio(
-        "Chế độ dữ liệu",
-        options=[
-            "Tất cả",
-            "Chỉ dữ liệu thực tế (is_synthetic = 0)",
-            "Dữ liệu Seed Demo (is_synthetic = 1)",
-        ],
-        index=0,
-        key="sb_data_mode",
-    )
 
-    col_d1, col_d2 = st.sidebar.columns(2)
-    with col_d1:
-        start_date = st.date_input("Từ ngày", value=date(2026, 8, 1), key="sb_start_date")
-    with col_d2:
-        end_date = st.date_input("Đến ngày", value=date(2026, 11, 30), key="sb_end_date")
+    min_date = date(2026, 8, 1)
+    max_date = max(date(2026, 12, 31), date.today())
+    date_range = st.sidebar.date_input(
+        "Khoảng thời gian (Từ ngày - Đến ngày)",
+        value=(min_date, max_date),
+        key="sb_date_range",
+    )
+    if isinstance(date_range, (tuple, list)):
+        if len(date_range) >= 2:
+            start_date, end_date = date_range[0], date_range[1]
+        elif len(date_range) == 1:
+            start_date = end_date = date_range[0]
+        else:
+            start_date, end_date = min_date, max_date
+    else:
+        start_date = end_date = date_range
 
     selected_unit_ids = st.sidebar.multiselect(
         "Đơn vị thành viên (9 trường/khoa ĐHTN)",
         options=list(TNU_UNITS.keys()),
         default=[],
-        format_func=lambda uid: f"{TNU_UNITS[uid][0]} — {TNU_UNITS[uid][1]}",
+        format_func=lambda uid: TNU_UNITS_SHORT[uid],
         placeholder="Tất cả 9 đơn vị thành viên",
         key="sb_units",
     )
@@ -856,22 +1129,13 @@ def main() -> None:
         key="sb_topics",
     )
 
-    st.sidebar.markdown("---")
-    with st.sidebar.expander("ℹ️ Thông tin Đồ án & Cấu hình", expanded=False):
-        st.markdown(
-            "- **SV:** Nguyễn Văn Chiến (`DTC235200079`)\n"
-            "- **Lớp:** CN CNTT K22A — Trường ĐH CNTT&TT (ICTU)\n"
-            "- **GVHD:** TS. Hà Thị Thanh\n"
-            f"- **Gemini Router:** `{'Đã bật API Key' if is_gemini_configured() else 'Keyword Fallback'}`"
-        )
-
     # Khởi tạo 4 Tab chính theo đặc tả Enterprise UI/UX
     tab1, tab2, tab3, tab4 = st.tabs(
         [
-            "💬 Tab 1: Phân tích Trực tiếp & Kiểm thử Mô hình",
-            "📊 Tab 2: Dashboard Giám sát Cảm xúc Toàn ĐHTN",
-            "📁 Tab 3: Quản lý, Import Hàng loạt & Kiểm duyệt",
-            "🏆 Tab 4: Đánh giá & Đối sánh Chất lượng Mô hình",
+            "💬 Tab 1: Phân tích Trực tiếp",
+            "📊 Tab 2: Dashboard Giám sát",
+            "📁 Tab 3: Quản lý & Kiểm duyệt",
+            "🏆 Tab 4: Đối sánh Mô hình",
         ]
     )
 
@@ -913,22 +1177,19 @@ def main() -> None:
                     key="t1_raw_text",
                 )
 
-                m_col1, m_col2 = st.columns(2)
-                with m_col1:
-                    unit_codes = [code for code, _ in TNU_UNITS.values()]
-                    chosen_unit_code = st.selectbox(
-                        "Đơn vị thành viên (9 đơn vị ĐHTN)",
-                        options=unit_codes,
-                        format_func=lambda c: f"{c} — {TNU_UNITS[UNIT_CODE_TO_ID[c]][1]}",
-                        key="t1_unit_code",
-                    )
-                with m_col2:
-                    chosen_source_id = st.selectbox(
-                        "Nguồn thu thập",
-                        options=list(DATA_SOURCES.keys()),
-                        format_func=lambda sid: DATA_SOURCES[sid],
-                        key="t1_source_id",
-                    )
+                unit_codes = [code for code, _ in TNU_UNITS.values()]
+                chosen_unit_code = st.selectbox(
+                    "Đơn vị thành viên (9 đơn vị ĐHTN)",
+                    options=unit_codes,
+                    format_func=lambda c: f"{c} — {TNU_UNITS[UNIT_CODE_TO_ID[c]][1]}",
+                    key="t1_unit_code",
+                )
+                chosen_source_id = st.selectbox(
+                    "Nguồn thu thập",
+                    options=list(DATA_SOURCES.keys()),
+                    format_func=lambda sid: DATA_SOURCES[sid],
+                    key="t1_source_id",
+                )
 
                 b_col1, b_col2 = st.columns(2)
                 with b_col1:
@@ -937,141 +1198,230 @@ def main() -> None:
                         type="primary",
                         width="stretch",
                         disabled=(len(raw_input.strip()) == 0),
-                    )
-                with b_col2:
-                    last_res: Optional[Dict[str, Any]] = st.session_state.get("t1_last_result")
-                    save_btn = st.button(
-                        "💾 Lưu vào CSDL",
-                        width="stretch",
-                        disabled=(last_res is None or not raw_input.strip()),
+                        key="t1_analyze_btn",
                     )
 
                 if analyze_btn and raw_input.strip():
-                    st.session_state["t1_last_result"] = predict_feedback_sentiment_and_topic(
+                    analyzed_single = predict_feedback_sentiment_and_topic(
                         raw_text=raw_input,
                         preprocessor=preprocessor,
                         model_bundle=model_bundle,
                     )
-
-                if save_btn and last_res is not None:
-                    ok, msg = save_feedback_record(
-                        engine=engine,
-                        preprocessor=preprocessor,
-                        result=last_res,
-                        unit_id=UNIT_CODE_TO_ID[chosen_unit_code],
-                        source_id=int(chosen_source_id),
-                        is_synthetic=0,
+                    analyzed_single["analyzed_text_signature"] = compute_text_signature(
+                        raw_input
                     )
-                    if ok:
-                        st.success(msg)
+                    st.session_state["last_single_analysis"] = analyzed_single
+                    st.session_state.pop("last_single_saved_hash", None)
+
+                last_res: Optional[Dict[str, Any]] = st.session_state.get(
+                    "last_single_analysis"
+                )
+                is_stale_text = (
+                    last_res is not None
+                    and compute_text_signature(raw_input)
+                    != last_res.get("analyzed_text_signature")
+                )
+
+                with b_col2:
+                    save_btn = st.button(
+                        "💾 Lưu vào CSDL",
+                        width="stretch",
+                        disabled=(
+                            last_res is None
+                            or not raw_input.strip()
+                            or is_stale_text
+                        ),
+                        key="t1_save_btn",
+                    )
+
+                if is_stale_text:
+                    st.warning(
+                        "⚠️ Nội dung văn bản đã thay đổi so với lúc phân tích. "
+                        "Vui lòng bấm **🚀 Phân tích Cảm xúc** lại trước khi lưu."
+                    )
+
+                if save_btn and last_res is not None and not is_stale_text:
+                    # Lấy trực tiếp giá trị hiện tại trên widget UI (unit_code, source_id) để lưu và tính idempotency_key
+                    active_unit_code = str(
+                        st.session_state.get("t1_unit_code", chosen_unit_code)
+                    )
+                    active_source_id = int(
+                        st.session_state.get("t1_source_id", chosen_source_id)
+                    )
+                    current_idem_key = (
+                        f"{last_res.get('content_hash', '')}:{active_unit_code}:{active_source_id}"
+                    )
+                    if (
+                        current_idem_key
+                        and st.session_state.get("last_single_saved_hash") == current_idem_key
+                    ):
+                        st.info("ℹ️ Bản ghi này đã được lưu trong phiên làm việc hiện tại")
                     else:
-                        st.warning(msg)
+                        ok, msg = save_feedback_record(
+                            engine=engine,
+                            preprocessor=preprocessor,
+                            result=last_res,
+                            unit_id=UNIT_CODE_TO_ID[active_unit_code],
+                            source_id=active_source_id,
+                            is_synthetic=0,
+                            allow_overwrite=True,
+                        )
+                        st.session_state["last_single_saved_hash"] = current_idem_key
+                        if ok:
+                            st.success(msg)
+                        else:
+                            st.warning(msg)
 
         with col_right:
             with st.container(border=True):
                 st.markdown("#### 2. Kết quả Suy luận AI & Tường minh Pipeline NLP 6 Bước")
-                res: Optional[Dict[str, Any]] = st.session_state.get("t1_last_result")
+                res: Optional[Dict[str, Any]] = st.session_state.get("last_single_analysis")
                 if res is None:
-                    res = predict_feedback_sentiment_and_topic(
-                        raw_text=raw_input,
-                        preprocessor=preprocessor,
-                        model_bundle=model_bundle,
+                    st.info(
+                        "💡 Nhập nội dung phản hồi hoặc chọn câu mẫu bên trái, sau đó bấm "
+                        "**🚀 Phân tích Cảm xúc** để chạy suy luận AI và hiển thị tường minh Pipeline NLP 6 bước."
                     )
-                    st.session_state["t1_last_result"] = res
-
-                mc1, mc2, mc3 = st.columns(3)
-                mc1.metric("Nhãn Cảm xúc", res["sentiment_vi"])
-                mc2.metric("Chủ đề Phản ánh", res["topic_name"])
-                mc3.metric(
-                    "Độ tự tin & Latency",
-                    f"{res['confidence_score'] * 100:.2f}% ({res['latency_ms']} ms)",
-                )
-
-                if res["confidence_score"] < 0.65 or res["review_status"] == "NEEDS_REVIEW":
-                    st.warning(
-                        f"⚠️ **Cảnh báo Độ tự tin thấp (`confidence = {res['confidence_score']:.2%}` < `65%`):** "
-                        f"Bản ghi tự động gắn cờ `review_status = 'NEEDS_REVIEW'` và kích hoạt định tuyến lai "
-                        f"(`{res['topic_router_source']}`)."
+                else:
+                    sent_color = SENTIMENT_COLOR_MAP.get(
+                        res["sentiment_vi"],
+                        SENTIMENT_COLOR_MAP.get(res["sentiment_text"], PALETTE["navy"]),
                     )
-                    if res.get("router_info"):
-                        ri = res["router_info"]
-                        st.info(
-                            f"**Gợi ý từ Hybrid Router ({ri['router_mode']}):** "
-                            f"Cảm xúc `{ri['suggested_sentiment_text']}` · Chủ đề `{ri['suggested_topic_name']}` — "
-                            f"{ri['explanation']}"
+                    card_style = (
+                        "white-space: normal; word-wrap: break-word; line-height: 1.35; "
+                        "padding: 12px 14px; border-radius: 10px; border: 1px solid #E2E8F0; "
+                        "background: #F8FAFC; height: 100%;"
+                    )
+                    label_style = (
+                        "font-size: 0.82rem; font-weight: 600; color: #475569; margin-bottom: 4px;"
+                    )
+                    mc1, mc2, mc3 = st.columns(3)
+                    with mc1:
+                        st.markdown(
+                            f"""
+                            <div style="{card_style}">
+                                <div style="{label_style}">Nhãn Cảm xúc</div>
+                                <div style="font-size: 1.08rem; font-weight: 700; color: {html.escape(sent_color)};">
+                                    {html.escape(str(res['sentiment_vi']))}
+                                </div>
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
                         )
+                    with mc2:
+                        st.markdown(
+                            f"""
+                            <div style="{card_style}">
+                                <div style="{label_style}">Chủ đề Phản ánh</div>
+                                <div style="font-size: 1.02rem; font-weight: 700; color: #0F172A;">
+                                    {html.escape(str(res['topic_name']))}
+                                </div>
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
+                    with mc3:
+                        st.markdown(
+                            f"""
+                            <div style="{card_style}">
+                                <div style="{label_style}">Độ tự tin &amp; Latency</div>
+                                <div style="font-size: 1.15rem; font-weight: 700; color: #1E3A8A;">
+                                    {res['confidence_score'] * 100:.2f}%
+                                </div>
+                                <div style="font-size: 0.82rem; font-weight: 500; color: #475569; margin-top: 2px;">
+                                    ⚡ Độ trễ: {res['latency_ms']} ms
+                                </div>
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
+                    st.markdown("<div style='height: 0.5rem;'></div>", unsafe_allow_html=True)
 
-                # Biểu đồ thanh ngang phân bố xác suất Softmax 3 lớp
-                prob_df = pd.DataFrame(
-                    [
-                        {
-                            "Lớp cảm xúc": "Tiêu cực (Negative)",
-                            "Xác suất (%)": round(res["prob_negative"] * 100, 2),
-                        },
-                        {
-                            "Lớp cảm xúc": "Trung tính (Neutral)",
-                            "Xác suất (%)": round(res["prob_neutral"] * 100, 2),
-                        },
-                        {
-                            "Lớp cảm xúc": "Tích cực (Positive)",
-                            "Xác suất (%)": round(res["prob_positive"] * 100, 2),
-                        },
-                    ]
-                )
-                fig_prob = px.bar(
-                    prob_df,
-                    x="Xác suất (%)",
-                    y="Lớp cảm xúc",
-                    color="Lớp cảm xúc",
-                    orientation="h",
-                    text="Xác suất (%)",
-                    color_discrete_map=SENTIMENT_COLOR_MAP,
-                )
-                fig_prob.update_traces(texttemplate="%{text:.2f}%", textposition="outside")
-                fig_prob.update_layout(showlegend=False)
-                fig_prob.update_xaxes(range=[0, 112])
-                st.plotly_chart(
-                    style_plotly(fig_prob, "Phân bố Xác suất Softmax 3 Lớp Cảm xúc", height=230),
-                    width="stretch",
-                )
+                    if res["confidence_score"] < 0.65 or res["review_status"] == "NEEDS_REVIEW":
+                        st.warning(
+                            f"⚠️ **Cảnh báo Độ tự tin thấp (`confidence = {res['confidence_score']:.2%}` < `65%`):** "
+                            f"Bản ghi tự động gắn cờ `review_status = 'NEEDS_REVIEW'` và kích hoạt định tuyến lai "
+                            f"(`{res['topic_router_source']}`)."
+                        )
+                        if res.get("router_info"):
+                            ri = res["router_info"]
+                            st.info(
+                                f"**Gợi ý từ Hybrid Router ({ri['router_mode']}):** "
+                                f"Cảm xúc `{ri['suggested_sentiment_text']}` · Chủ đề `{ri['suggested_topic_name']}` — "
+                                f"{ri['explanation']}"
+                            )
 
-                st.markdown("##### 🔍 Kết quả tường minh từng bước trong Pipeline NLP 6 Bước (`src/preprocessor.py`)")
-                steps_dict = res["steps"]
-                step_labels = [
-                    ("Bước 1 — Chuẩn hóa Unicode NFC, xóa URL/HTML & Ẩn danh PII (Nghị định 13/2023/NĐ-CP)", "step1_nfc_pii"),
-                    ("Bước 2 — Ánh xạ Emoji & Emoticon (ưu tiên khóa dài `:)))`, `:((` trước `:)`)", "step2_emoji"),
-                    ("Bước 3 — Thu gọn ký tự lặp kéo dài (`siêuuuu` → `siêu`) & Chuyển chữ thường", "step3_elongated"),
-                    ("Bước 4 & 5 — Giải mã Teencode học đường ĐHTN & Chuẩn hóa thanh điệu tiếng Việt", "step4_5_teencode_tone"),
-                    ("Bước 6 — Tách từ tiếng Việt bằng PyVi (`ViTokenizer`) đưa vào PhoBERT", "step6_segmented"),
-                ]
-                for title_step, key_step in step_labels:
-                    val_step = html.escape(str(steps_dict.get(key_step, "")))
-                    st.markdown(
-                        f'<div class="tnu-step-box"><strong>{html.escape(title_step)}:</strong><br/><code>{val_step}</code></div>',
-                        unsafe_allow_html=True,
+                    # Biểu đồ thanh ngang phân bố xác suất Softmax 3 lớp
+                    prob_df = pd.DataFrame(
+                        [
+                            {
+                                "Lớp cảm xúc": "Tiêu cực (Negative)",
+                                "Xác suất (%)": round(res["prob_negative"] * 100, 2),
+                            },
+                            {
+                                "Lớp cảm xúc": "Trung tính (Neutral)",
+                                "Xác suất (%)": round(res["prob_neutral"] * 100, 2),
+                            },
+                            {
+                                "Lớp cảm xúc": "Tích cực (Positive)",
+                                "Xác suất (%)": round(res["prob_positive"] * 100, 2),
+                            },
+                        ]
                     )
-                st.caption(f"Mã băm chống trùng lặp SHA-256 (`content_hash`): `{res['content_hash']}`")
+                    fig_prob = px.bar(
+                        prob_df,
+                        x="Xác suất (%)",
+                        y="Lớp cảm xúc",
+                        color="Lớp cảm xúc",
+                        orientation="h",
+                        text="Xác suất (%)",
+                        color_discrete_map=SENTIMENT_COLOR_MAP,
+                    )
+                    fig_prob.update_traces(texttemplate="%{text:.2f}%", textposition="outside")
+                    fig_prob.update_layout(showlegend=False)
+                    fig_prob.update_xaxes(range=[0, 112])
+                    st.plotly_chart(
+                        style_plotly(fig_prob, "Phân bố Xác suất Softmax 3 Lớp Cảm xúc", height=230),
+                        width="stretch",
+                    )
+
+                    st.markdown("##### 🔍 Kết quả tường minh từng bước trong Pipeline NLP 6 Bước (`src/preprocessor.py`)")
+                    steps_dict = res["steps"]
+                    step_labels = [
+                        ("Bước 1 — Chuẩn hóa Unicode NFC, xóa URL/HTML & Ẩn danh PII (Nghị định 13/2023/NĐ-CP)", "step1_nfc_pii"),
+                        ("Bước 2 — Ánh xạ Emoji & Emoticon (ưu tiên khóa dài `:)))`, `:((` trước `:)`)", "step2_emoji"),
+                        ("Bước 3 — Thu gọn ký tự lặp kéo dài (`siêuuuu` → `siêu`) & Chuyển chữ thường", "step3_elongated"),
+                        ("Bước 4 & 5 — Giải mã Teencode học đường ĐHTN & Chuẩn hóa thanh điệu tiếng Việt", "step4_5_teencode_tone"),
+                        ("Bước 6 — Tách từ tiếng Việt bằng PyVi (`ViTokenizer`) đưa vào PhoBERT", "step6_segmented"),
+                    ]
+                    for title_step, key_step in step_labels:
+                        val_step = html.escape(str(steps_dict.get(key_step, "")))
+                        st.markdown(
+                            f'<div class="tnu-step-box"><strong>{html.escape(title_step)}:</strong><br/><code>{val_step}</code></div>',
+                            unsafe_allow_html=True,
+                        )
+                    st.caption(f"Mã băm chống trùng lặp SHA-256 (`content_hash`): `{res['content_hash']}`")
 
     # ==========================================================================
     # TAB 2: 📊 DASHBOARD GIÁM SÁT CẢM XÚC TOÀN ĐẠI HỌC THÁI NGUYÊN
     # ==========================================================================
     with tab2:
+        only_new_records = st.checkbox(
+            "🔍 Chỉ lọc riêng các ý kiến mới thu thập / Import trực tiếp trong phiên thực tế",
+            value=False,
+            key="t2_only_new_records",
+        )
+        t2_data_mode = "Dữ liệu thực tế" if only_new_records else "Tất cả dữ liệu"
+
         df_filtered = query_filtered_feedbacks(
             engine=engine,
             preprocessor=preprocessor,
-            data_mode=data_mode,
+            data_mode=t2_data_mode,
             start_date=start_date,
             end_date=end_date,
             selected_unit_ids=selected_unit_ids,
             selected_source_ids=selected_source_ids,
             selected_topic_ids=selected_topic_ids,
         )
-
-        if data_mode != "Chỉ dữ liệu thực tế (is_synthetic = 0)":
-            st.caption(
-                "ℹ️ Lưu ý học thuật: Bộ lọc hiện bao gồm các bản ghi mô phỏng/Seed Demo (`is_synthetic = 1`). "
-                "Chọn **'Chỉ dữ liệu thực tế (is_synthetic = 0)'** ở Sidebar khi thống kê riêng phản hồi thu thập thực tế."
-            )
 
         n_total = len(df_filtered)
         if n_total == 0:
@@ -1137,29 +1487,55 @@ def main() -> None:
             r2_c1, r2_c2 = st.columns(2, gap="medium")
             with r2_c1:
                 with st.container(border=True):
-                    trend_df = (
-                        df_filtered.assign(
-                            day=df_filtered["feedback_date"].dt.strftime("%Y-%m-%d")
+                    st.markdown("##### 1. Xu hướng Cảm xúc theo Thời gian")
+                    span_days = (end_date - start_date).days
+                    if span_days > 30:
+                        trend_df = (
+                            df_filtered.assign(
+                                period=df_filtered["feedback_date"]
+                                .dt.to_period("W-MON")
+                                .apply(lambda p: p.start_time.strftime("%Y-%m-%d"))
+                            )
+                            .groupby(["period", "sentiment_vi"], as_index=False)
+                            .size()
+                            .rename(columns={"size": "Số lượng"})
+                            .sort_values("period")
                         )
-                        .groupby(["day", "sentiment_vi"], as_index=False)
-                        .size()
-                        .rename(columns={"size": "Số lượng"})
-                    )
+                    else:
+                        trend_df = (
+                            df_filtered.assign(
+                                period=df_filtered["feedback_date"].dt.strftime("%Y-%m-%d")
+                            )
+                            .groupby(["period", "sentiment_vi"], as_index=False)
+                            .size()
+                            .rename(columns={"size": "Số lượng"})
+                            .sort_values("period")
+                        )
                     fig_line = px.line(
                         trend_df,
-                        x="day",
+                        x="period",
                         y="Số lượng",
                         color="sentiment_vi",
                         markers=True,
+                        line_shape="spline",
                         color_discrete_map=SENTIMENT_COLOR_MAP,
+                        title=None,
+                    )
+                    fig_line = style_plotly(fig_line)
+                    fig_line.update_layout(
+                        title=None,
+                        legend_title_text="",
+                        xaxis=dict(title=None),
+                        yaxis=dict(title="Số lượng phản hồi"),
                     )
                     st.plotly_chart(
-                        style_plotly(fig_line, "1. Xu hướng Cảm xúc theo Thời gian"),
+                        fig_line,
                         width="stretch",
                     )
 
             with r2_c2:
                 with st.container(border=True):
+                    st.markdown("##### 2. Cơ cấu Cảm xúc theo Nguồn thu thập")
                     src_df = (
                         df_filtered.groupby(["source_name", "sentiment_vi"], as_index=False)
                         .size()
@@ -1173,9 +1549,17 @@ def main() -> None:
                         orientation="h",
                         barmode="stack",
                         color_discrete_map=SENTIMENT_COLOR_MAP,
+                        title=None,
+                    )
+                    fig_src = style_plotly(fig_src)
+                    fig_src.update_layout(
+                        title=None,
+                        legend_title_text="",
+                        xaxis=dict(title=None),
+                        yaxis=dict(title=None),
                     )
                     st.plotly_chart(
-                        style_plotly(fig_src, "2. Cơ cấu Cảm xúc theo Nguồn thu thập"),
+                        fig_src,
                         width="stretch",
                     )
 
@@ -1183,26 +1567,47 @@ def main() -> None:
             r3_c1, r3_c2 = st.columns(2, gap="medium")
             with r3_c1:
                 with st.container(border=True):
+                    st.markdown("##### 3. Phân bố Cảm xúc theo 4 Chủ đề Phản ánh")
+                    topic_short_label_map = {
+                        "Giảng viên & Phương pháp giảng dạy": "Giảng viên",
+                        "Chương trình đào tạo & Học phần": "Chương trình ĐT",
+                        "Cơ sở vật chất & Hạ tầng CNTT": "Cơ sở vật chất",
+                        "Khác (Hành chính, Học phí, CTSV)": "Hành chính & Khác",
+                    }
                     top_df = (
                         df_filtered.groupby(["topic_name", "sentiment_vi"], as_index=False)
                         .size()
                         .rename(columns={"size": "Số lượng"})
                     )
+                    top_df["Chủ đề rút gọn"] = top_df["topic_name"].map(
+                        lambda x: topic_short_label_map.get(str(x), str(x))
+                    )
                     fig_top = px.bar(
                         top_df,
-                        x="topic_name",
+                        x="Chủ đề rút gọn",
                         y="Số lượng",
                         color="sentiment_vi",
                         barmode="group",
                         color_discrete_map=SENTIMENT_COLOR_MAP,
+                        hover_data={"topic_name": True, "Chủ đề rút gọn": False},
+                        labels={"topic_name": "Chủ đề đầy đủ"},
+                        title=None,
+                    )
+                    fig_top = style_plotly(fig_top)
+                    fig_top.update_layout(
+                        title=None,
+                        legend_title_text="",
+                        xaxis=dict(tickangle=0, title=None, tickfont=dict(size=12)),
+                        yaxis=dict(title=None),
                     )
                     st.plotly_chart(
-                        style_plotly(fig_top, "3. Phân bố Cảm xúc theo 4 Chủ đề Phản ánh"),
+                        fig_top,
                         width="stretch",
                     )
 
             with r3_c2:
                 with st.container(border=True):
+                    st.markdown("##### 4. So sánh Phản hồi giữa 9 Trường / Đơn vị Thành viên ĐHTN")
                     unit_df = (
                         df_filtered.groupby(["unit_code", "sentiment_vi"], as_index=False)
                         .size()
@@ -1215,12 +1620,17 @@ def main() -> None:
                         color="sentiment_vi",
                         barmode="stack",
                         color_discrete_map=SENTIMENT_COLOR_MAP,
+                        title=None,
+                    )
+                    fig_unit = style_plotly(fig_unit)
+                    fig_unit.update_layout(
+                        title=None,
+                        legend_title_text="",
+                        xaxis=dict(tickangle=0, title=None),
+                        yaxis=dict(title=None),
                     )
                     st.plotly_chart(
-                        style_plotly(
-                            fig_unit,
-                            "4. So sánh Phản hồi giữa 9 Trường / Đơn vị Thành viên ĐHTN",
-                        ),
+                        fig_unit,
                         width="stretch",
                     )
 
@@ -1304,7 +1714,17 @@ def main() -> None:
                     type=["csv", "xlsx"],
                     key="t3_batch_uploader",
                 )
-                if up_file is not None:
+                if up_file is None:
+                    # Tự động xóa kết quả lô cũ khi người dùng gỡ tệp tải lên
+                    st.session_state.pop("last_batch_result", None)
+                    st.session_state.pop("last_batch_file_sig", None)
+                else:
+                    current_file_sig = f"{up_file.name}:{up_file.size}"
+                    if st.session_state.get("last_batch_file_sig") != current_file_sig:
+                        # Tự động xóa kết quả lô cũ khi người dùng tải lên tệp mới khác tên/kích thước
+                        st.session_state.pop("last_batch_result", None)
+                        st.session_state["last_batch_file_sig"] = current_file_sig
+
                     try:
                         if up_file.name.lower().endswith(".xlsx"):
                             imp_df = pd.read_excel(io.BytesIO(up_file.getvalue()))
@@ -1319,28 +1739,62 @@ def main() -> None:
                     if missing_cols:
                         st.error(f"Tệp thiếu các cột bắt buộc: {', '.join(sorted(missing_cols))}")
                     elif not imp_df.empty:
-                        st.dataframe(imp_df.head(15), width="stretch", hide_index=True)
-                        if st.button(
-                            f"🚀 Chạy Phân tích & Import Hàng loạt ({len(imp_df)} dòng)",
-                            type="primary",
-                        ):
-                            prog = st.progress(0.0, text="Đang xử lý hàng loạt...")
-                            saved_n, dup_n, err_n = 0, 0, 0
+                        st.markdown("##### 📄 Xem trước dữ liệu tệp tải lên")
+                        st.dataframe(imp_df.head(15), use_container_width=True, hide_index=True)
+
+                        btn_col, chk_col = st.columns([0.52, 0.48], gap="medium")
+                        with chk_col:
+                            allow_overwrite = st.checkbox(
+                                "🔄 Cho phép ghi đè / cập nhật bản ghi trùng",
+                                value=False,
+                                key="t3_allow_overwrite",
+                            )
+                        with btn_col:
+                            run_batch_btn = st.button(
+                                f"🚀 Chạy Phân tích & Import Hàng loạt ({len(imp_df)} dòng)",
+                                type="primary",
+                                width="stretch",
+                            )
+
+                        # CHỈ chạy suy luận theo lô (batch_size=32) & ghi CSDL/CSV đúng 1 lần khi bấm nút
+                        if run_batch_btn:
+                            prog = st.progress(0.0, text="Đang chạy suy luận AI theo lô (batch_size=32)...")
+                            new_count, dup_count, err_count = 0, 0, 0
+                            analyzed_rows: List[Dict[str, Any]] = []
                             total_rows = len(imp_df)
+
+                            valid_entries: List[Tuple[int, str, int, str, int, datetime]] = []
                             for i, r in imp_df.iterrows():
-                                txt = str(r.get("sentence", "")).strip()
+                                raw_val = r.get("sentence", "")
+                                txt = "" if pd.isna(raw_val) else str(raw_val).strip()
                                 if not txt:
-                                    err_n += 1
+                                    err_count += 1
                                     continue
+
                                 u_code = str(r.get("unit_code", "ICTU")).strip().upper()
                                 u_id = UNIT_CODE_TO_ID.get(u_code, 1)
+                                resolved_u_code = TNU_UNITS[u_id][0]
                                 s_name = str(r.get("source_name", "CSV_IMPORT")).strip().upper()
                                 s_id = SOURCE_NAME_TO_ID.get(s_name, 4)
-                                pred_res = predict_feedback_sentiment_and_topic(
-                                    raw_text=txt,
-                                    preprocessor=preprocessor,
-                                    model_bundle=model_bundle,
+
+                                fb_dt_val = pd.to_datetime(r.get("feedback_date"), errors="coerce")
+                                fb_dt = (
+                                    fb_dt_val.to_pydatetime()
+                                    if pd.notna(fb_dt_val)
+                                    else datetime.now()
                                 )
+                                valid_entries.append((int(i), txt, u_id, resolved_u_code, s_id, fb_dt))
+
+                            batch_preds = predict_feedback_batch(
+                                raw_texts=[e[1] for e in valid_entries],
+                                preprocessor=preprocessor,
+                                model_bundle=model_bundle,
+                                batch_size=32,
+                            )
+
+                            for idx_valid, ((row_i, _txt, u_id, resolved_u_code, s_id, fb_dt), pred_res) in enumerate(
+                                zip(valid_entries, batch_preds), start=1
+                            ):
                                 ok, _ = save_feedback_record(
                                     engine=engine,
                                     preprocessor=preprocessor,
@@ -1348,19 +1802,149 @@ def main() -> None:
                                     unit_id=u_id,
                                     source_id=s_id,
                                     is_synthetic=0,
+                                    feedback_dt=fb_dt,
+                                    allow_overwrite=allow_overwrite,
                                 )
                                 if ok:
-                                    saved_n += 1
+                                    new_count += 1
+                                    save_status = (
+                                        "✅ Đã lưu mới (Ghi đè cập nhật)"
+                                        if allow_overwrite
+                                        else "✅ Đã lưu mới"
+                                    )
                                 else:
-                                    dup_n += 1
-                                prog.progress(
-                                    (i + 1) / max(1, total_rows),
-                                    text=f"Đã xử lý {i + 1}/{total_rows} dòng...",
+                                    dup_count += 1
+                                    save_status = "⚠️ Đã tồn tại (Chỉ hiển thị kết quả)"
+
+                                analyzed_rows.append(
+                                    {
+                                        "Câu phản hồi gốc": pred_res["raw_content"],
+                                        "Đơn vị": resolved_u_code,
+                                        "Nhãn Cảm xúc AI": pred_res["sentiment_vi"],
+                                        "Chủ đề AI": pred_res["topic_name"],
+                                        "Độ tự tin (%)": round(
+                                            float(pred_res["confidence_score"]) * 100.0, 2
+                                        ),
+                                        "Trạng thái Lưu": save_status,
+                                        "Văn bản sau tiền xử lý": pred_res["processed_content"],
+                                        "Thời gian xử lý (ms)": float(pred_res["latency_ms"]),
+                                        "_sentiment_label": int(pred_res["sentiment_label"]),
+                                    }
                                 )
+                                prog.progress(
+                                    idx_valid / max(1, len(valid_entries)),
+                                    text=f"Đã xử lý {idx_valid}/{len(valid_entries)} dòng hợp lệ (batch_size=32)...",
+                                )
+
+                            st.session_state["last_batch_result"] = {
+                                "new_count": new_count,
+                                "dup_count": dup_count,
+                                "err_count": err_count,
+                                "df": pd.DataFrame(analyzed_rows),
+                            }
+
+                        # Ở các lần rerun tiếp theo, CHỈ ĐỌC từ st.session_state["last_batch_result"]
+                        last_batch = st.session_state.get("last_batch_result")
+                        if last_batch is not None:
+                            batch_df: pd.DataFrame = last_batch["df"]
                             st.success(
-                                f"Hoàn tất Batch Import: Đã lưu mới **{saved_n}** dòng · "
-                                f"Bỏ qua do trùng `content_hash`: **{dup_n}** dòng · Lỗi dữ liệu: **{err_n}** dòng."
+                                f"Hoàn tất Batch Import: Đã lưu mới **{last_batch['new_count']}** dòng · "
+                                f"Đã tồn tại **{last_batch['dup_count']}** dòng · "
+                                f"Lỗi **{last_batch['err_count']}** dòng."
                             )
+
+                            if not batch_df.empty:
+                                n_batch_pos = int((batch_df["_sentiment_label"] == 2).sum())
+                                n_batch_neu = int((batch_df["_sentiment_label"] == 1).sum())
+                                n_batch_neg = int((batch_df["_sentiment_label"] == 0).sum())
+                                total_valid = len(batch_df)
+
+                                st.markdown("##### 📊 Thống kê nhanh kết quả lô vừa phân tích")
+                                sc1, sc2, sc3 = st.columns(3)
+                                with sc1:
+                                    render_scorecard(
+                                        "Tích cực (Positive)",
+                                        f"{n_batch_pos:,} câu",
+                                        f"Chiếm {100.0 * n_batch_pos / max(1, total_valid):.1f}% lô dữ liệu",
+                                        PALETTE["positive"],
+                                    )
+                                with sc2:
+                                    render_scorecard(
+                                        "Trung tính (Neutral)",
+                                        f"{n_batch_neu:,} câu",
+                                        f"Chiếm {100.0 * n_batch_neu / max(1, total_valid):.1f}% lô dữ liệu",
+                                        PALETTE["neutral"],
+                                    )
+                                with sc3:
+                                    render_scorecard(
+                                        "Tiêu cực (Negative)",
+                                        f"{n_batch_neg:,} câu",
+                                        f"Chiếm {100.0 * n_batch_neg / max(1, total_valid):.1f}% lô dữ liệu",
+                                        PALETTE["negative"],
+                                    )
+
+                                st.markdown("<div style='height: 0.6rem;'></div>", unsafe_allow_html=True)
+                                st.markdown("##### 📋 Bảng Kết quả Phân tích AI Chi tiết")
+                                display_cols = [
+                                    "Câu phản hồi gốc",
+                                    "Đơn vị",
+                                    "Nhãn Cảm xúc AI",
+                                    "Chủ đề AI",
+                                    "Độ tự tin (%)",
+                                    "Trạng thái Lưu",
+                                    "Văn bản sau tiền xử lý",
+                                    "Thời gian xử lý (ms)",
+                                ]
+                                export_df = batch_df[display_cols]
+                                st.dataframe(
+                                    export_df,
+                                    use_container_width=True,
+                                    hide_index=True,
+                                    column_config={
+                                        "Câu phản hồi gốc": st.column_config.TextColumn(
+                                            "Câu phản hồi gốc",
+                                            width="large",
+                                        ),
+                                        "Đơn vị": st.column_config.TextColumn(
+                                            "Đơn vị",
+                                            width="small",
+                                        ),
+                                        "Nhãn Cảm xúc AI": st.column_config.TextColumn(
+                                            "Nhãn Cảm xúc AI",
+                                            width="medium",
+                                        ),
+                                        "Chủ đề AI": st.column_config.TextColumn(
+                                            "Chủ đề AI",
+                                            width="medium",
+                                        ),
+                                        "Độ tự tin (%)": st.column_config.NumberColumn(
+                                            "Độ tự tin (%)",
+                                            format="%.2f%%",
+                                            width="small",
+                                        ),
+                                        "Trạng thái Lưu": st.column_config.TextColumn(
+                                            "Trạng thái Lưu",
+                                            width="medium",
+                                        ),
+                                        "Văn bản sau tiền xử lý": st.column_config.TextColumn(
+                                            "Văn bản sau tiền xử lý",
+                                            width="large",
+                                        ),
+                                        "Thời gian xử lý (ms)": st.column_config.NumberColumn(
+                                            "Thời gian xử lý (ms)",
+                                            format="%.1f ms",
+                                            width="small",
+                                        ),
+                                    },
+                                )
+
+                                st.download_button(
+                                    "⬇️ Tải kết quả phân tích về máy (tnu_batch_analyzed_results.csv)",
+                                    data=export_df.to_csv(index=False).encode("utf-8-sig"),
+                                    file_name="tnu_batch_analyzed_results.csv",
+                                    mime="text/csv",
+                                    key="t3_download_analyzed_csv",
+                                )
 
         with sub_review:
             with st.container(border=True):
@@ -1375,7 +1959,7 @@ def main() -> None:
                 all_df = query_filtered_feedbacks(
                     engine=engine,
                     preprocessor=preprocessor,
-                    data_mode=data_mode,
+                    data_mode="Tất cả dữ liệu",
                     start_date=start_date,
                     end_date=end_date,
                     selected_unit_ids=selected_unit_ids,
@@ -1616,6 +2200,7 @@ def main() -> None:
         b_col1, b_col2 = st.columns([0.52, 0.48], gap="medium")
         with b_col1:
             with st.container(border=True):
+                st.markdown("##### Đối sánh các Mô hình trên Tập Kiểm thử Độc lập UIT-VSFC (N = 3.166)")
                 melt_df = test_bench_df.melt(
                     id_vars=["Mô hình thực nghiệm"],
                     value_vars=["Accuracy (%)", "Macro-F1 (%)", "Weighted-F1 (%)", "F1 - Neutral (%)"],

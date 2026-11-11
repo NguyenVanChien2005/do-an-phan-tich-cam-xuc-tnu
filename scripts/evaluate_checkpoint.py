@@ -4,11 +4,12 @@ Sinh các tệp artifact JSON đã xác thực (kèm mã băm SHA-256 của tậ
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 from zoneinfo import ZoneInfo
 
 import numpy as np
@@ -32,6 +33,52 @@ if str(ROOT) not in sys.path:
 
 from tnu_sentiment.constants import SENTIMENT_ID_TO_VI
 from tnu_sentiment.nlp.pii_masker import mask_pii
+from tnu_sentiment.nlp.preprocessor import VietnamesePreprocessor
+
+
+def prepare_evaluation_texts(
+    df: pd.DataFrame,
+    from_raw: bool = False,
+    preprocessor: Optional[VietnamesePreprocessor] = None,
+) -> List[str]:
+    """Chuẩn bị danh sách văn bản đầu vào cho mô hình.
+    Nếu from_raw=True: đưa raw_content qua VietnamesePreprocessor.preprocess() để đo chất lượng end-to-end thực tế.
+    """
+    if from_raw:
+        prep = preprocessor or VietnamesePreprocessor()
+        source_col = "raw_content" if "raw_content" in df.columns else "sentence"
+        return [prep.preprocess(str(txt)) for txt in df[source_col].astype(str).tolist()]
+    return df["processed_content"].astype(str).tolist()
+
+
+def parse_eval_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Đánh giá thực nghiệm checkpoint PhoBERT-v2 và TF-IDF Baseline trên Validation & Test."
+    )
+    parser.add_argument(
+        "--from-raw",
+        action="store_true",
+        help="Đưa raw_content qua VietnamesePreprocessor trước khi dự đoán để đo chất lượng thực tế của ứng dụng.",
+    )
+    parser.add_argument(
+        "--dataset-dir",
+        type=Path,
+        default=ROOT / "TNU_Sentiment_Dataset_Final",
+        help="Thư mục chứa tnu_train_final.csv, tnu_val_final.csv, tnu_test_final.csv.",
+    )
+    parser.add_argument(
+        "--checkpoint-dir",
+        type=Path,
+        default=ROOT / "phobert_tnu_best_model-20261101T002214Z-1-001" / "phobert_tnu_best_model",
+        help="Thư mục chứa trọng số checkpoint PhoBERT.",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=ROOT / "artifacts" / "evaluation",
+        help="Thư mục lưu kết quả JSON đánh giá.",
+    )
+    return parser.parse_args(argv)
 
 
 def compute_eval_set_id(df: pd.DataFrame, split_name: str, label_col: str) -> str:
@@ -200,30 +247,34 @@ def predict_phobert_batch(
     return np.array(preds, dtype=int), np.array(confs, dtype=float)
 
 
-def main() -> None:
-    ds_dir = ROOT / "TNU_Sentiment_Dataset_Final"
-    ckpt_dir = (
-        ROOT
-        / "phobert_tnu_best_model-20261101T002214Z-1-001"
-        / "phobert_tnu_best_model"
-    )
-    out_dir = ROOT / "artifacts" / "evaluation"
+def main(argv: Optional[List[str]] = None) -> None:
+    args = parse_eval_args(argv)
+    ds_dir = args.dataset_dir
+    ckpt_dir = args.checkpoint_dir
+    out_dir = args.output_dir
     out_dir.mkdir(parents=True, exist_ok=True)
 
     train_df = pd.read_csv(ds_dir / "tnu_train_final.csv")
     val_df = pd.read_csv(ds_dir / "tnu_val_final.csv")
     test_df = pd.read_csv(ds_dir / "tnu_test_final.csv")
 
-    val_set_id = compute_eval_set_id(val_df, "Validation", "sentiment")
-    test_set_id = compute_eval_set_id(test_df, "Test", "sentiment")
+    preprocessor = VietnamesePreprocessor() if args.from_raw else None
+    train_texts = prepare_evaluation_texts(train_df, from_raw=args.from_raw, preprocessor=preprocessor)
+    val_texts = prepare_evaluation_texts(val_df, from_raw=args.from_raw, preprocessor=preprocessor)
+    test_texts = prepare_evaluation_texts(test_df, from_raw=args.from_raw, preprocessor=preprocessor)
 
-    print(f"Evaluating PhoBERT on Validation ({len(val_df)}) & Test ({len(test_df)})...")
-    val_preds, val_confs = predict_phobert_batch(
-        ckpt_dir, val_df["processed_content"].astype(str).tolist()
-    )
-    test_preds, test_confs = predict_phobert_batch(
-        ckpt_dir, test_df["processed_content"].astype(str).tolist()
-    )
+    val_eval_df = val_df.copy()
+    test_eval_df = test_df.copy()
+    val_eval_df["processed_content"] = val_texts
+    test_eval_df["processed_content"] = test_texts
+
+    val_set_id = compute_eval_set_id(val_eval_df, "Validation", "sentiment")
+    test_set_id = compute_eval_set_id(test_eval_df, "Test", "sentiment")
+
+    mode_label = "from-raw (VietnamesePreprocessor)" if args.from_raw else "pre-tokenized processed_content"
+    print(f"Evaluating PhoBERT ({mode_label}) on Validation ({len(val_df)}) & Test ({len(test_df)})...")
+    val_preds, val_confs = predict_phobert_batch(ckpt_dir, val_texts)
+    test_preds, test_confs = predict_phobert_batch(ckpt_dir, test_texts)
 
     phobert_val = build_sentiment_artifact(
         run_id="phobert-focal-val-v1",
@@ -232,11 +283,11 @@ def main() -> None:
         dataset_version="TNU_Sentiment_Dataset_Final_v1",
         split="Validation",
         eval_set_id=val_set_id,
-        df=val_df,
+        df=val_eval_df,
         y_true=val_df["sentiment"].to_numpy(dtype=int),
         y_pred=val_preds,
         confidences=val_confs,
-        notes="Đánh giá trực tiếp từ checkpoint phobert_tnu_best_model trên tnu_val_final.csv.",
+        notes=f"Đánh giá trực tiếp từ checkpoint phobert_tnu_best_model trên tnu_val_final.csv ({mode_label}).",
     )
     phobert_test = build_sentiment_artifact(
         run_id="phobert-focal-test-v1",
@@ -245,22 +296,22 @@ def main() -> None:
         dataset_version="TNU_Sentiment_Dataset_Final_v1",
         split="Test",
         eval_set_id=test_set_id,
-        df=test_df,
+        df=test_eval_df,
         y_true=test_df["sentiment"].to_numpy(dtype=int),
         y_pred=test_preds,
         confidences=test_confs,
-        notes="Đánh giá trực tiếp từ checkpoint phobert_tnu_best_model trên tnu_test_final.csv.",
+        notes=f"Đánh giá trực tiếp từ checkpoint phobert_tnu_best_model trên tnu_test_final.csv ({mode_label}).",
     )
 
     print("Evaluating TF-IDF + LogisticRegression baseline on identical evaluation sets...")
     vec = TfidfVectorizer(ngram_range=(1, 2), max_features=25000, sublinear_tf=True)
-    X_train = vec.fit_transform(train_df["processed_content"].astype(str))
+    X_train = vec.fit_transform(train_texts)
     y_train = train_df["sentiment"].to_numpy(dtype=int)
     clf = LogisticRegression(max_iter=1000, class_weight="balanced", random_state=42)
     clf.fit(X_train, y_train)
 
-    val_prob_lr = clf.predict_proba(vec.transform(val_df["processed_content"].astype(str)))
-    test_prob_lr = clf.predict_proba(vec.transform(test_df["processed_content"].astype(str)))
+    val_prob_lr = clf.predict_proba(vec.transform(val_texts))
+    test_prob_lr = clf.predict_proba(vec.transform(test_texts))
 
     tfidf_val = build_sentiment_artifact(
         run_id="tfidf-logreg-val-v1",
@@ -269,11 +320,11 @@ def main() -> None:
         dataset_version="TNU_Sentiment_Dataset_Final_v1",
         split="Validation",
         eval_set_id=val_set_id,
-        df=val_df,
+        df=val_eval_df,
         y_true=val_df["sentiment"].to_numpy(dtype=int),
         y_pred=np.argmax(val_prob_lr, axis=-1),
         confidences=np.max(val_prob_lr, axis=-1),
-        notes="Mô hình cơ sở (Baseline) huấn luyện trên tnu_train_final.csv, đánh giá cùng tập tnu_val_final.csv.",
+        notes=f"Mô hình cơ sở (Baseline) huấn luyện trên tnu_train_final.csv, đánh giá cùng tập tnu_val_final.csv ({mode_label}).",
     )
     tfidf_test = build_sentiment_artifact(
         run_id="tfidf-logreg-test-v1",
@@ -282,11 +333,11 @@ def main() -> None:
         dataset_version="TNU_Sentiment_Dataset_Final_v1",
         split="Test",
         eval_set_id=test_set_id,
-        df=test_df,
+        df=test_eval_df,
         y_true=test_df["sentiment"].to_numpy(dtype=int),
         y_pred=np.argmax(test_prob_lr, axis=-1),
         confidences=np.max(test_prob_lr, axis=-1),
-        notes="Mô hình cơ sở (Baseline) huấn luyện trên tnu_train_final.csv, đánh giá cùng tập tnu_test_final.csv.",
+        notes=f"Mô hình cơ sở (Baseline) huấn luyện trên tnu_train_final.csv, đánh giá cùng tập tnu_test_final.csv ({mode_label}).",
     )
 
     artifacts = [

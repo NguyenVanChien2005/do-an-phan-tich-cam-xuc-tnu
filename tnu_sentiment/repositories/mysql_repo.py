@@ -24,6 +24,7 @@ from tnu_sentiment.domain.models import (
     ComponentHealth,
     FeedbackRecord,
     FilterCriteria,
+    ImportExecutionSummary,
     PaginatedRecords,
     ReviewLogEntry,
     ReviewUpdateRequest,
@@ -55,6 +56,7 @@ class MySQLFeedbackRepository(FeedbackRepository):
         self._safe_summary = safe_conn_summary
         self._tz = ZoneInfo(tz_name)
         self._init_error = init_error
+        self._import_batches_cache: List[Dict[str, object]] = []
 
     @property
     def repository_kind(self) -> str:
@@ -322,6 +324,10 @@ class MySQLFeedbackRepository(FeedbackRepository):
             updated_at=row["updated_at"],
             idempotency_key=row.get("idempotency_key"),
             source_record_id=row.get("source_record_id"),
+            source_url=row.get("source_url"),
+            post_id=row.get("post_id"),
+            parent_comment_id=row.get("parent_comment_id"),
+            collected_at=row.get("collected_at"),
             content_hash=str(row.get("content_hash") or ""),
         )
 
@@ -604,8 +610,19 @@ class MySQLFeedbackRepository(FeedbackRepository):
                     message=f"Đã lưu bản ghi #{new_id} vào MySQL thành công.",
                 )
         except IntegrityError as exc:
-            err_str = str(exc)
-            if "idempotency_key" in err_str:
+            orig = getattr(exc, "orig", None)
+            orig_msg = str(orig if orig is not None else "").lower()
+            orig_args = getattr(orig, "args", ()) or ()
+            is_mysql_dup_code = len(orig_args) >= 1 and orig_args[0] == 1062
+            is_unique_violation = (
+                is_mysql_dup_code
+                or "unique" in orig_msg
+                or "duplicate entry" in orig_msg
+            )
+
+            if is_unique_violation and (
+                "idempotency_key" in orig_msg or "content_hash" in orig_msg
+            ):
                 return SaveRecordResult(
                     saved=False,
                     was_idempotent_duplicate=True,
@@ -614,7 +631,9 @@ class MySQLFeedbackRepository(FeedbackRepository):
                     feedback_id=None,
                     message="Thao tác lưu trùng idempotency_key đã bị ràng buộc duy nhất chặn lại.",
                 )
-            if "uq_source_record" in err_str:
+            if is_unique_violation and (
+                "uq_source_record" in orig_msg or "source_record_id" in orig_msg
+            ):
                 return SaveRecordResult(
                     saved=False,
                     was_idempotent_duplicate=False,
@@ -623,7 +642,23 @@ class MySQLFeedbackRepository(FeedbackRepository):
                     feedback_id=None,
                     message=f"Trùng khóa nghiệp vụ (source_code, source_record_id='{payload.source_record_id}').",
                 )
-            raise
+            return SaveRecordResult(
+                saved=False,
+                was_idempotent_duplicate=False,
+                was_source_duplicate=False,
+                is_content_duplicate_candidate=False,
+                feedback_id=None,
+                message=f"Lỗi ràng buộc CSDL (NOT NULL / FOREIGN KEY): {orig if orig is not None else exc}",
+            )
+        except SQLAlchemyError as exc:
+            return SaveRecordResult(
+                saved=False,
+                was_idempotent_duplicate=False,
+                was_source_duplicate=False,
+                is_content_duplicate_candidate=False,
+                feedback_id=None,
+                message=f"Lỗi kết nối / thực thi CSDL: {exc}",
+            )
 
     def apply_review_updates(
         self, updates: List[ReviewUpdateRequest]
@@ -832,3 +867,66 @@ class MySQLFeedbackRepository(FeedbackRepository):
             )
         return out
 
+    def save_import_batch(
+        self, summary: ImportExecutionSummary, origin_note: Optional[str] = None
+    ) -> None:
+        batch_entry: Dict[str, object] = {
+            "batch_id": summary.batch_id,
+            "filename": summary.filename,
+            "declared_origin": summary.declared_origin,
+            "origin_confirmation_note": origin_note,
+            "total_rows": int(summary.total_rows_read),
+            "saved_count": int(summary.saved_count),
+            "duplicate_skipped_count": int(summary.duplicate_skipped_count),
+            "validation_error_count": int(summary.validation_error_count),
+            "inference_error_count": int(summary.inference_error_count),
+            "db_error_count": int(summary.db_error_count),
+            "unprocessed_count": int(summary.unprocessed_count),
+            "created_at": self._now_local(),
+        }
+        self._import_batches_cache.insert(0, batch_entry)
+        if self._engine is None:
+            return
+        try:
+            with self._engine.begin() as conn:
+                conn.execute(
+                    text(
+                        """
+                        INSERT INTO import_batches (
+                            batch_id, filename, declared_origin, origin_confirmation_note,
+                            total_rows, saved_count, duplicate_skipped_count,
+                            validation_error_count, inference_error_count,
+                            db_error_count, unprocessed_count, created_at
+                        ) VALUES (
+                            :batch_id, :filename, :declared_origin, :origin_confirmation_note,
+                            :total_rows, :saved_count, :duplicate_skipped_count,
+                            :validation_error_count, :inference_error_count,
+                            :db_error_count, :unprocessed_count, :created_at
+                        )
+                        """
+                    ),
+                    batch_entry,
+                )
+        except SQLAlchemyError:
+            pass
+
+    def list_import_batches(self, limit: int = 20) -> List[Dict[str, object]]:
+        if self._engine is not None:
+            try:
+                with self._engine.connect() as conn:
+                    rows = (
+                        conn.execute(
+                            text(
+                                "SELECT * FROM import_batches "
+                                "ORDER BY created_at DESC LIMIT :lim"
+                            ),
+                            {"lim": max(1, int(limit))},
+                        )
+                        .mappings()
+                        .all()
+                    )
+                if rows:
+                    return [dict(r) for r in rows]
+            except SQLAlchemyError:
+                pass
+        return list(self._import_batches_cache[: max(1, int(limit))])

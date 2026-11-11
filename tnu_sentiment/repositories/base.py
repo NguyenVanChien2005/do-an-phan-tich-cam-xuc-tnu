@@ -13,6 +13,7 @@ from tnu_sentiment.domain.models import (
     ComponentHealth,
     FeedbackRecord,
     FilterCriteria,
+    ImportExecutionSummary,
     PaginatedRecords,
     ReviewLogEntry,
     ReviewUpdateRequest,
@@ -49,6 +50,10 @@ class NewFeedbackPayload:
     feedback_date: datetime
     idempotency_key: Optional[str] = None
     source_record_id: Optional[str] = None
+    source_url: Optional[str] = None
+    post_id: Optional[str] = None
+    parent_comment_id: Optional[str] = None
+    collected_at: Optional[datetime] = None
     content_hash: str = ""
     author_hash: Optional[str] = None
     batch_id: Optional[str] = None
@@ -133,6 +138,16 @@ class FeedbackRepository(ABC):
     def export_records(
         self, filters: FilterCriteria, limit: int = 5000
     ) -> List[Dict[str, object]]: ...
+
+    def save_import_batch(
+        self, summary: ImportExecutionSummary, origin_note: Optional[str] = None
+    ) -> None:
+        """Lưu lịch sử lô import vào bảng import_batches (mặc định no-op nếu lớp con không ghi đè)."""
+        return None
+
+    def list_import_batches(self, limit: int = 20) -> List[Dict[str, object]]:
+        """Liệt kê lịch sử các lô import từ bảng import_batches."""
+        return []
 
 
 class EvaluationRepository(ABC):

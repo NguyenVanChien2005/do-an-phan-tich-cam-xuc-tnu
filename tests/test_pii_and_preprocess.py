@@ -77,3 +77,55 @@ def test_html_pill_escapes_untrusted_text() -> None:
     assert "<img" not in rendered
     assert "&lt;img" in rendered
 
+
+def test_rebuild_clean_splits_zero_leakage_and_preprocess_sync() -> None:
+    """Bước 3.1: Kiểm tra rebuild_clean_splits chạy lại VietnamesePreprocessor.preprocess(),
+    xóa bỏ hoàn toàn rò rỉ train/val (0 overlap) kể cả biến thể cùng template gốc, giữ nguyên test 3.166 dòng.
+    """
+    from scripts.rebuild_clean_splits import compute_template_group_key, rebuild_clean_splits
+
+    # Kiểm tra gom nhóm biến thể từ cùng 1 template miền ĐHTN (chỉ đổi mã trường ICTU vs TNUT vs DTC)
+    k1 = compute_template_group_key(
+        "Giảng viên trường ictu dạy thực hành nhiệt tình 👍.",
+        "giảng_viên trường đại_học công_nghệ_thông_tin và truyền_thông dạy thực_hành nhiệt_tình tích_cực_tốt .",
+    )
+    k2 = compute_template_group_key(
+        "Giảng viên trường tnut dạy thực hành nhiệt tình 👍.",
+        "giảng_viên trường đại_học kỹ_thuật công_nghiệp dạy thực_hành nhiệt_tình tích_cực_tốt .",
+    )
+    assert k1 == k2
+
+    report = rebuild_clean_splits(write_files=False)
+    assert report["preprocessing_drift_fixed"]["train"] == 2804
+    assert report["preprocessing_drift_fixed"]["val"] == 384
+    assert report["preprocessing_drift_fixed"]["test"] == 608
+    assert report["initial_train_val_processed_leakage_rows"] == 124
+    assert report["after_clean_overlap"]["raw_content_overlap"] == 0
+    assert report["after_clean_overlap"]["processed_content_overlap"] == 0
+    assert report["after_clean_overlap"]["group_key_overlap"] == 0
+    assert report["clean_counts"]["test"] == 3166
+    assert report["test_near_duplicate_audit"]["near_duplicate_count"] == 0
+
+
+def test_evaluate_checkpoint_from_raw_option() -> None:
+    """Bước 3.2: Kiểm tra tùy chọn --from-raw của evaluate_checkpoint.py đưa raw_content qua VietnamesePreprocessor."""
+    import pandas as pd
+    from scripts.evaluate_checkpoint import parse_eval_args, prepare_evaluation_texts
+
+    args = parse_eval_args(["--from-raw"])
+    assert args.from_raw is True
+
+    sample_df = pd.DataFrame(
+        {
+            "raw_content": ["Thầy dạy môn lập trình Python ở ictu siêuuuu dễ hỉu 🥰."],
+            "processed_content": ["cũ_chưa_chuẩn_hóa"],
+            "sentiment": [2],
+        }
+    )
+    texts_default = prepare_evaluation_texts(sample_df, from_raw=False)
+    assert texts_default == ["cũ_chưa_chuẩn_hóa"]
+
+    texts_from_raw = prepare_evaluation_texts(sample_df, from_raw=True)
+    assert texts_from_raw[0] != "cũ_chưa_chuẩn_hóa"
+    assert "hiểu" in texts_from_raw[0]
+    assert "tích_cực" in texts_from_raw[0]

@@ -126,7 +126,10 @@ INSERT IGNORE INTO data_sources (source_id, source_code, source_name, descriptio
     (1, 'SURVEY_PORTAL', 'Hệ thống khảo sát người học cuối học kỳ', 'Phiếu khảo sát chính thức của các đơn vị thuộc ĐHTN'),
     (2, 'LMS_ELEARNING', 'Hệ thống quản lý học tập trực tuyến (LMS)', 'Phản hồi từ học phần trên LMS / E-Learning'),
     (3, 'FANPAGE_FORUM', 'Diễn đàn & Fanpage cộng đồng sinh viên ĐHTN', 'Bình luận thu thập qua Graph API / Fanpage đơn vị'),
-    (4, 'QA_IMPORT_BOX', 'Hòm thư góp ý trực tuyến & Import CSV/XLSX', 'Kênh tiếp nhận ý kiến trực tiếp hoặc nhập theo lô');
+    (4, 'QA_IMPORT_BOX', 'Hòm thư góp ý trực tuyến & Import CSV/XLSX', 'Kênh tiếp nhận ý kiến trực tiếp hoặc nhập theo lô'),
+    (5, 'FACEBOOK',      'Bình luận Fanpage / Hội nhóm Facebook', 'Bình luận thu thập qua Facebook Graph API'),
+    (6, 'YOUTUBE',       'Bình luận kênh YouTube', 'Bình luận thu thập từ video/kênh YouTube'),
+    (7, 'NEWS_COMMENT',  'Bình luận bài viết / Bản tin điện tử', 'Bình luận thu thập từ chuyên trang tin tức/bài đăng');
 
 INSERT IGNORE INTO topics (topic_id, topic_code, topic_name, description) VALUES
     (1, 'LECTURER',   'Giảng viên & Phương pháp giảng dạy', 'Thái độ, chuyên môn, phương pháp truyền đạt và hỗ trợ của giảng viên'),

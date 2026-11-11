@@ -6,7 +6,7 @@ import json
 import time
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 from tnu_sentiment.constants import (
     SENTIMENT_ID_TO_CODE,
@@ -35,6 +35,20 @@ class BaseSentimentAdapter(ABC):
     @abstractmethod
     def predict(self, processed_text: str) -> SentimentPrediction: ...
 
+    def predict_batch(
+        self, processed_texts: List[str], batch_size: int = 32
+    ) -> List[SentimentPrediction]:
+        """Suy luận theo lô (batched inference) với kích thước lô mặc định batch_size = 32."""
+        if not processed_texts:
+            return []
+        safe_batch = max(1, int(batch_size))
+        results: List[SentimentPrediction] = []
+        for start in range(0, len(processed_texts), safe_batch):
+            chunk = processed_texts[start : start + safe_batch]
+            for txt in chunk:
+                results.append(self.predict(txt))
+        return results
+
 
 class UnavailableSentimentAdapter(BaseSentimentAdapter):
     """Adapter đại diện trạng thái thiếu hoặc lỗi checkpoint — tuyệt đối không sinh nhãn giả."""
@@ -59,6 +73,11 @@ class UnavailableSentimentAdapter(BaseSentimentAdapter):
         )
 
     def predict(self, processed_text: str) -> SentimentPrediction:
+        raise ModelNotReadyError(self._reason)
+
+    def predict_batch(
+        self, processed_texts: List[str], batch_size: int = 32
+    ) -> List[SentimentPrediction]:
         raise ModelNotReadyError(self._reason)
 
 
@@ -226,6 +245,88 @@ class PhoBertSentimentAdapter(BaseSentimentAdapter):
             ),
             is_illustrative_demo=False,
         )
+
+    def predict_batch(
+        self, processed_texts: List[str], batch_size: int = 32
+    ) -> List[SentimentPrediction]:
+        """Thực thi suy luận theo lô (batched inference, mặc định batch_size=32)
+        bằng cách tokenize cả lô và gọi self._model(**encoded) một lần cho mỗi lô.
+        """
+        if not processed_texts:
+            return []
+        for idx, txt in enumerate(processed_texts):
+            if not txt or not txt.strip():
+                raise ValueError(
+                    f"Văn bản sau tiền xử lý tại vị trí {idx} rỗng, không thể suy luận."
+                )
+
+        safe_batch = max(1, int(batch_size))
+        results: List[SentimentPrediction] = []
+
+        for start in range(0, len(processed_texts), safe_batch):
+            batch_texts = processed_texts[start : start + safe_batch]
+            t0 = time.perf_counter()
+
+            token_counts: List[int] = []
+            truncated_flags: List[bool] = []
+            for txt in batch_texts:
+                raw_ids = self._tokenizer.encode(
+                    txt, add_special_tokens=True, truncation=False
+                )
+                tc = len(raw_ids)
+                token_counts.append(tc)
+                truncated_flags.append(tc > self._max_length)
+
+            encoded = self._tokenizer(
+                batch_texts,
+                return_tensors="pt",
+                truncation=True,
+                max_length=self._max_length,
+                padding=True,
+            )
+            encoded = {k: v.to(self._device) for k, v in encoded.items()}
+
+            with self._torch.no_grad():
+                outputs = self._model(**encoded)
+                probs_batch = (
+                    self._torch.softmax(outputs.logits, dim=-1)
+                    .detach()
+                    .cpu()
+                    .tolist()
+                )
+
+            elapsed_batch_ms = (time.perf_counter() - t0) * 1000.0
+            per_item_ms = round(elapsed_batch_ms / max(1, len(batch_texts)), 2)
+
+            for i, probs_list in enumerate(probs_batch):
+                probabilities: Dict[int, float] = {
+                    0: round(float(probs_list[0]), 6),
+                    1: round(float(probs_list[1]), 6),
+                    2: round(float(probs_list[2]), 6),
+                }
+                pred_id = max(probabilities, key=lambda k: probabilities[k])
+                confidence = probabilities[pred_id]
+                results.append(
+                    SentimentPrediction(
+                        label_id=pred_id,
+                        label_code=SENTIMENT_ID_TO_CODE[pred_id],
+                        label_vi=SENTIMENT_ID_TO_VI[pred_id],
+                        confidence=confidence,
+                        probabilities=probabilities,
+                        model_version=self._model_version,
+                        was_truncated=truncated_flags[i],
+                        token_count=token_counts[i],
+                        max_length=self._max_length,
+                        inference_time_ms=per_item_ms,
+                        measurement_scope=(
+                            f"Batched Tokenize + PhoBERT forward pass (batch_size={safe_batch}) "
+                            f"trên {self._device.upper()}"
+                        ),
+                        is_illustrative_demo=False,
+                    )
+                )
+
+        return results
 
 
 def load_sentiment_adapter(

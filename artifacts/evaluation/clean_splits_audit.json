@@ -1,0 +1,98 @@
+{
+  "original_counts": {
+    "train": 12140,
+    "val": 1709,
+    "test": 3166
+  },
+  "clean_counts": {
+    "train": 11394,
+    "val": 1747,
+    "test": 3166
+  },
+  "preprocessing_drift_fixed": {
+    "train": 2804,
+    "val": 384,
+    "test": 608
+  },
+  "initial_train_val_processed_leakage_rows": 124,
+  "after_clean_overlap": {
+    "raw_content_overlap": 0,
+    "processed_content_overlap": 0,
+    "group_key_overlap": 0
+  },
+  "template_groups": {
+    "total_template_groups": 692,
+    "train_template_groups": 554,
+    "val_template_groups": 138
+  },
+  "test_near_duplicate_audit": {
+    "domain_unique_count": 797,
+    "test_unique_count": 3166,
+    "jaccard_threshold": 0.85,
+    "max_word_jaccard": 0.9,
+    "max_char_4gram_jaccard": 0.875,
+    "near_duplicate_count": 19,
+    "near_duplicate_pairs": [
+      {
+        "domain_text": "cô rất tận_tâm , nhiệt_tình với sinh_viên .",
+        "test_text": "cô giảng_dạy rất nhiệt_tình , tận_tâm với sinh_viên .",
+        "word_jaccard": 0.8889,
+        "char_4gram_jaccard": 0.5
+      },
+      {
+        "domain_text": "dạy hay , dễ hiểu , tận_tình .",
+        "test_text": "dạy hay , dễ hiểu .",
+        "word_jaccard": 0.8571,
+        "char_4gram_jaccard": 0.5357
+      },
+      {
+        "domain_text": "giáo_viên giảng_dạy nhiệt_tình , giảng_dạy hay , dễ hiểu .",
+        "test_text": "giáo_viên giảng_dạy nhiệt_tình , dễ hiểu .",
+        "word_jaccard": 0.875,
+        "char_4gram_jaccard": 0.8298
+      },
+      {
+        "domain_text": "giảng_viên dạy dễ hiểu , dễ tiếp_thu .",
+        "test_text": "giảng_viên dạy dễ hiểu , dễ tiếp_thu , nhiệt_tình .",
+        "word_jaccard": 0.875,
+        "char_4gram_jaccard": 0.7021
+      },
+      {
+        "domain_text": "giảng_viên dạy nhiệt_tình , giảng dễ hiểu .",
+        "test_text": "giảng_viên giảng dễ hiểu , nhiệt_tình .",
+        "word_jaccard": 0.875,
+        "char_4gram_jaccard": 0.6
+      },
+      {
+        "domain_text": "nhiệt_tình , dạy dễ hiểu .",
+        "test_text": "nhiệt_tình , dạy hay , dễ hiểu .",
+        "word_jaccard": 0.8571,
+        "char_4gram_jaccard": 0.7
+      },
+      {
+        "domain_text": "nhiệt_tình , dạy dễ hiểu .",
+        "test_text": "thầy dạy nhiệt_tình , dễ hiểu .",
+        "word_jaccard": 0.8571,
+        "char_4gram_jaccard": 0.6452
+      },
+      {
+        "domain_text": "nhiệt_tình , dạy dễ hiểu .",
+        "test_text": "thầy nhiệt_tình , dạy dễ hiểu .",
+        "word_jaccard": 0.8571,
+        "char_4gram_jaccard": 0.8214
+      },
+      {
+        "domain_text": "thân_thiện , nhiệt_tình với sinh_viên .",
+        "test_text": "giảng_viên nhiệt_tình , thân_thiện với sinh_viên .",
+        "word_jaccard": 0.8571,
+        "char_4gram_jaccard": 0.6
+      },
+      {
+        "domain_text": "thầy dạy khá nhanh và khá khó hiểu .",
+        "test_text": "thầy dạy nhanh và khó hiểu .",
+        "word_jaccard": 0.875,
+        "char_4gram_jaccard": 0.697
+      }
+    ]
+  }
+}

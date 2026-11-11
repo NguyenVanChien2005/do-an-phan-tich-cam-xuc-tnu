@@ -83,6 +83,21 @@ do-an-phan-tich-cam-xuc-tnu/
 
 ## 4. Hướng dẫn Cài đặt & Vận hành
 
+### 4.1. Một lệnh duy nhất để máy mới tải trọng số (`model.safetensors`) và chạy Inference thật
+Do tệp trọng số `model.safetensors` (~515MB) không lưu trực tiếp trên Git thông thường, thông tin kiểm định toàn vẹn (`SHA-256`, phiên bản `transformers`, `pyvi`, `underthesea`, `preprocessor_version`) được khai báo trong [`models/checkpoint_manifest.json`](models/checkpoint_manifest.json). Trên máy mới, chỉ cần chạy **1 lệnh duy nhất** dưới đây để tự động tải trọng số, đối khớp mã băm `SHA-256` và khởi chạy ứng dụng với mô hình thật:
+
+```powershell
+# Tải trọng số từ HuggingFace Hub / Google Drive URL, kiểm tra SHA-256 và khởi chạy ứng dụng:
+python scripts/download_checkpoint.py --url $env:TNU_CHECKPOINT_URL && python -m streamlit run app.py
+```
+
+Hoặc kiểm tra nhanh tính toàn vẹn `SHA-256` của trọng số đã có trên đĩa:
+```powershell
+python scripts/download_checkpoint.py --verify-only
+```
+
+### 4.2. Cài đặt môi trường, Khởi tạo CSDL & Kiểm thử tự động (`pytest`)
+
 ```powershell
 # 1. Cài đặt các thư viện phụ thuộc
 python -m pip install -r requirements.txt
@@ -90,6 +105,9 @@ python -m pip install -r requirements.txt
 # 2. (Tùy chọn) Khởi tạo cấu trúc MySQL 8.0 và nạp 3.500 bản ghi Seed Demo
 python database/seed_data.py
 
-# 3. Khởi chạy ứng dụng Web Streamlit (tự động chuyển sang CSV Fallback nếu chưa bật MySQL)
+# 3. Chạy bộ kiểm thử tự động (tự động skip nhóm @pytest.mark.requires_checkpoint nếu chưa tải model.safetensors)
+pytest
+
+# 4. Khởi chạy ứng dụng Web Streamlit (tự động chuyển sang CSV Fallback nếu chưa bật MySQL)
 python -m streamlit run app.py
 ```

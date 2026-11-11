@@ -192,6 +192,9 @@ INITIAL_SOURCES: List[Tuple[str, str]] = [
     ("STUDENT_FORUM", "Kênh phản hồi sinh viên"),
     ("QA_BOX", "Hòm thư góp ý đơn vị"),
     ("CSV_IMPORT", "Nhập từ tệp CSV/XLSX"),
+    ("FACEBOOK", "Bình luận Fanpage / Hội nhóm Facebook"),
+    ("YOUTUBE", "Bình luận kênh YouTube"),
+    ("NEWS_COMMENT", "Bình luận bài viết / Bản tin điện tử"),
 ]
 
 # Mapping chủ đề bằng mã ổn định (topic_code), KHÔNG dựa vào argmax + 1

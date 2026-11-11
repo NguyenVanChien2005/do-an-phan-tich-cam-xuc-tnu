@@ -1,0 +1,43 @@
+{
+  "model_name": "phobert-v2-tnu-sentiment",
+  "base_model": "vinai/phobert-base-v2",
+  "checkpoint_dir": "phobert_tnu_best_model-20261101T002214Z-1-001/phobert_tnu_best_model",
+  "weights_file": "model.safetensors",
+  "sha256": "af8d807b249073d462d75485e81d071b17257c1c73b59019dfaceb480e82fdc4",
+  "size_bytes": 540026460,
+  "transformers": "5.22.1",
+  "underthesea": "6.8.4",
+  "pyvi": "0.1.1",
+  "preprocessor_version": "tnu-preprocess-v1.1-pyvi",
+  "env_vars": {
+    "checkpoint_url": "TNU_CHECKPOINT_URL",
+    "hf_repo_id": "TNU_CHECKPOINT_HF_REPO",
+    "gdrive_url": "TNU_CHECKPOINT_GDRIVE_URL"
+  },
+  "files": {
+    "model.safetensors": {
+      "size_bytes": 540026460,
+      "sha256": "af8d807b249073d462d75485e81d071b17257c1c73b59019dfaceb480e82fdc4"
+    },
+    "config.json": {
+      "size_bytes": 980,
+      "sha256": "ba239aa2016fbb2b03828d490e7fa9ddb7cf42fec2d0d7bb4bcdfc27e519849a"
+    },
+    "vocab.txt": {
+      "size_bytes": 895321,
+      "sha256": "dffd7543c401fb6567253ae7c3313004532c33d062525250049c616544bad777"
+    },
+    "bpe.codes": {
+      "size_bytes": 1135173,
+      "sha256": "9dfe53fb8abbddd3387da99641c36e00bee757a3679aad9cf0a7cdc4b30f6ef8"
+    },
+    "tokenizer_config.json": {
+      "size_bytes": 1205,
+      "sha256": "e6a9eb7dfcdc2b0f83b8e72f189c9d972fc96d84395992cb60ea2e43da6c8c7f"
+    },
+    "added_tokens.json": {
+      "size_bytes": 22,
+      "sha256": "956163bbe8b0625fcc779207447308285eab218ffe0551d3e0deeae5538da326"
+    }
+  }
+}

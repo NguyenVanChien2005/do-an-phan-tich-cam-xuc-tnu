@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, event, text
+from sqlalchemy.exc import IntegrityError
 
 from tnu_sentiment.constants import DataOrigin, LabelPolicy, ProcessingStatus, ReviewStatus
 from tnu_sentiment.domain.models import FilterCriteria
@@ -83,10 +84,20 @@ def _create_sqlite_compatible_schema(engine) -> None:
             feedback_date TIMESTAMP NOT NULL,
             created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE (source_code, source_record_id)
+            UNIQUE (source_code, source_record_id),
+            FOREIGN KEY (unit_code) REFERENCES units (unit_code),
+            FOREIGN KEY (source_code) REFERENCES sources (source_code),
+            FOREIGN KEY (predicted_topic_code) REFERENCES topics (topic_code)
         )
         """,
     ]
+
+    @event.listens_for(engine, "connect")
+    def _enable_sqlite_fk(dbapi_connection, _connection_record) -> None:
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+
     with engine.begin() as conn:
         for s in stmts:
             conn.execute(text(s))
@@ -162,3 +173,90 @@ def test_half_open_date_bounds_and_parameterized_sql_execution() -> None:
     assert "0912345678" not in paged.items[0].masked_content
     assert "<PHONE>" in paged.items[0].masked_content
 
+
+def test_mysql_repo_distinguishes_not_null_and_fk_from_idempotency_key() -> None:
+    """Bước 1.1: Kiểm thử lỗi NOT NULL, FOREIGN KEY và lỗi trùng idempotency_key thực sự."""
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    _create_sqlite_compatible_schema(engine)
+    repo = MySQLFeedbackRepository(engine=engine, safe_conn_summary="sqlite-constraint-test")
+
+    base_kwargs = dict(
+        origin_note="Test ràng buộc",
+        masked_content="Phản hồi kiểm thử ràng buộc CSDL.",
+        processed_content="phản_hồi kiểm_thử",
+        pii_types_detected=None,
+        was_truncated=False,
+        is_multi_aspect=False,
+        processing_status=ProcessingStatus.DONE.value,
+        processing_error=None,
+        predicted_sentiment_label=2,
+        predicted_sentiment_text="Positive",
+        confidence_score=0.92,
+        prob_negative=0.03,
+        prob_neutral=0.05,
+        prob_positive=0.92,
+        predicted_topic_code="LECTURER",
+        topic_assignment_source="MANUAL",
+        model_version="PhoBERT-v2",
+        pipeline_version="v1",
+        inference_time_ms=12.0,
+        review_status=ReviewStatus.UNREVIEWED.value,
+        review_reason=None,
+        feedback_date=datetime(2026, 10, 20, 9, 0, 0),
+    )
+
+    # 1. Lỗi NOT NULL (data_origin=None) -> saved=False, was_idempotent_duplicate=False
+    not_null_payload = NewFeedbackPayload(
+        data_origin=None,  # type: ignore[arg-type]
+        unit_code="ICTU",
+        source_code="SURVEY_PORTAL",
+        idempotency_key="idem-notnull-001",
+        **base_kwargs,
+    )
+    res_not_null = repo.save_feedback(not_null_payload)
+    assert res_not_null.saved is False
+    assert res_not_null.was_idempotent_duplicate is False
+    assert res_not_null.was_source_duplicate is False
+
+    # 2. Lỗi FOREIGN KEY (unit_code không tồn tại trong bảng units) -> saved=False, was_idempotent_duplicate=False
+    fk_payload = NewFeedbackPayload(
+        data_origin=DataOrigin.TNU_REAL.value,
+        unit_code="UNKNOWN_UNIT_FK",
+        source_code="SURVEY_PORTAL",
+        idempotency_key="idem-fk-001",
+        **base_kwargs,
+    )
+    res_fk = repo.save_feedback(fk_payload)
+    assert res_fk.saved is False
+    assert res_fk.was_idempotent_duplicate is False
+    assert res_fk.was_source_duplicate is False
+
+    # 3. Lỗi trùng idempotency_key thực sự (kể cả khi nhảy vào nhánh IntegrityError code 1062 / UNIQUE)
+    valid_payload = NewFeedbackPayload(
+        data_origin=DataOrigin.TNU_REAL.value,
+        unit_code="ICTU",
+        source_code="SURVEY_PORTAL",
+        idempotency_key="idem-real-dup-001",
+        **base_kwargs,
+    )
+    res_ok = repo.save_feedback(valid_payload)
+    assert res_ok.saved is True
+
+    res_dup = repo.save_feedback(valid_payload)
+    assert res_dup.saved is False
+    assert res_dup.was_idempotent_duplicate is True
+
+    # Mô phỏng MySQL IntegrityError (1062, "Duplicate entry 'idem-1062' for key 'feedbacks.idempotency_key'")
+    class _FakeMySQLDupOrig(Exception):
+        def __init__(self) -> None:
+            super().__init__(1062, "Duplicate entry 'idem-1062' for key 'feedbacks.idempotency_key'")
+            self.args = (1062, "Duplicate entry 'idem-1062' for key 'feedbacks.idempotency_key'")
+
+    class _RaceEngine:
+        def begin(self):
+            raise IntegrityError("INSERT INTO feedbacks (idempotency_key) ...", {}, _FakeMySQLDupOrig())
+
+    race_repo = MySQLFeedbackRepository(engine=_RaceEngine(), safe_conn_summary="mysql-1062")  # type: ignore[arg-type]
+    res_1062 = race_repo.save_feedback(valid_payload)
+    assert res_1062.saved is False
+    assert res_1062.was_idempotent_duplicate is True

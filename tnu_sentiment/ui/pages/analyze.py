@@ -249,6 +249,11 @@ def render_analyze_page(
                         current_raw_text=input_text,
                         outcome=current_outcome,
                         override_topic_code=selected_topic,
+                        override_unit_code=selected_unit,
+                        override_source_code=selected_source,
+                        override_confirmed_tnu_real=confirmed_real,
+                        override_origin_note=origin_note,
+                        mode=mode,
                     )
                     st.session_state[saved_key] = True
                     st.session_state[flash_key] = (

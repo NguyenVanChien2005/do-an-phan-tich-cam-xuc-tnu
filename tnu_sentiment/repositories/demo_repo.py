@@ -22,6 +22,7 @@ from tnu_sentiment.domain.models import (
     ComponentHealth,
     FeedbackRecord,
     FilterCriteria,
+    ImportExecutionSummary,
     PaginatedRecords,
     ReviewLogEntry,
     ReviewUpdateRequest,
@@ -53,6 +54,7 @@ class DemoFeedbackRepository(FeedbackRepository):
 
         self._records: List[FeedbackRecord] = []
         self._review_logs: List[ReviewLogEntry] = []
+        self._import_batches: List[Dict[str, object]] = []
         self._next_id: int = 1
         self._next_log_id: int = 1
         self._idempotency_index: Dict[str, int] = {}
@@ -363,6 +365,10 @@ class DemoFeedbackRepository(FeedbackRepository):
             updated_at=now_dt,
             idempotency_key=payload.idempotency_key,
             source_record_id=payload.source_record_id,
+            source_url=payload.source_url,
+            post_id=payload.post_id,
+            parent_comment_id=payload.parent_comment_id,
+            collected_at=payload.collected_at,
             content_hash=c_hash,
         )
         self._records.append(rec)
@@ -508,3 +514,26 @@ class DemoFeedbackRepository(FeedbackRepository):
             )
         return out
 
+    def save_import_batch(
+        self, summary: ImportExecutionSummary, origin_note: Optional[str] = None
+    ) -> None:
+        self._import_batches.insert(
+            0,
+            {
+                "batch_id": summary.batch_id,
+                "filename": summary.filename,
+                "declared_origin": summary.declared_origin,
+                "origin_confirmation_note": origin_note,
+                "total_rows": summary.total_rows_read,
+                "saved_count": summary.saved_count,
+                "duplicate_skipped_count": summary.duplicate_skipped_count,
+                "validation_error_count": summary.validation_error_count,
+                "inference_error_count": summary.inference_error_count,
+                "db_error_count": summary.db_error_count,
+                "unprocessed_count": summary.unprocessed_count,
+                "created_at": self._now_local(),
+            },
+        )
+
+    def list_import_batches(self, limit: int = 20) -> List[Dict[str, object]]:
+        return [copy.copy(b) for b in self._import_batches[: max(1, int(limit))]]

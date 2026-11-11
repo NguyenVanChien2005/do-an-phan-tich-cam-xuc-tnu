@@ -243,6 +243,11 @@ class AnalysisService:
         current_raw_text: str,
         outcome: AnalysisOutcome,
         override_topic_code: Optional[str] = None,
+        override_unit_code: Optional[str] = None,
+        override_source_code: Optional[str] = None,
+        override_confirmed_tnu_real: Optional[bool] = None,
+        override_origin_note: Optional[str] = None,
+        mode: Optional[AppMode] = None,
     ) -> SaveRecordResult:
         if self.is_outcome_stale(current_raw_text, outcome):
             raise ValueError(
@@ -254,11 +259,52 @@ class AnalysisService:
 
         now_local = datetime.now(ZoneInfo(self._cfg.timezone_name)).replace(tzinfo=None)
         pred = outcome.prediction
-        topic_code = override_topic_code or outcome.selected_topic_code or "UNCLASSIFIED"
+
+        # Lấy trực tiếp các siêu dữ liệu hiện tại trên widget UI (không làm thay đổi vector PhoBERT)
+        unit_code = (override_unit_code or outcome.unit_code or "UNSPECIFIED").strip()
+        source_code = (override_source_code or outcome.source_code or "UNSPECIFIED").strip()
+        topic_code = (override_topic_code or outcome.selected_topic_code or "UNCLASSIFIED").strip()
+
+        matched_sample = self.find_matching_sample_case(current_raw_text)
+        if mode is not None or override_confirmed_tnu_real is not None:
+            if mode == AppMode.DEMO or matched_sample is not None:
+                data_origin = DataOrigin.DEMO.value
+                origin_note = (
+                    "Câu mẫu thử nghiệm giao diện"
+                    if matched_sample is not None
+                    else "Nhập thử nghiệm trong chế độ Demo"
+                )
+            elif override_confirmed_tnu_real:
+                data_origin = DataOrigin.TNU_REAL.value
+                origin_note = (
+                    override_origin_note
+                    or outcome.origin_note
+                    or "Phản hồi thực tế xác nhận thủ công"
+                ).strip()
+            else:
+                data_origin = DataOrigin.DEMO.value
+                origin_note = "Nhập kiểm thử trực tiếp (chưa xác nhận nguồn khảo sát thực tế ĐHTN)"
+        else:
+            data_origin = outcome.data_origin
+            origin_note = outcome.origin_note
+
+        # Cập nhật lại outcome để phản ánh siêu dữ liệu mới nhất vừa chọn trên UI
+        outcome.unit_code = unit_code
+        outcome.source_code = source_code
+        outcome.selected_topic_code = topic_code
+        outcome.data_origin = data_origin
+        outcome.origin_note = origin_note
+
         c_hash = compute_content_hash(outcome.preprocess.masked_content)
         a_hash = compute_author_hash(
-            f"{outcome.source_code}:{outcome.unit_code}", self._cfg.secret_salt
+            f"{source_code}:{unit_code}", self._cfg.secret_salt
         )
+        meta_sig = hashlib.sha256(
+            f"{outcome.idempotency_key}|{unit_code}|{source_code}|{topic_code}|{data_origin}".encode(
+                "utf-8"
+            )
+        ).hexdigest()[:24]
+        effective_idem_key = f"{outcome.idempotency_key}-{meta_sig}"
 
         llm_sent = (
             outcome.llm_suggestion.suggested_sentiment_label
@@ -275,10 +321,10 @@ class AnalysisService:
         )
 
         payload = NewFeedbackPayload(
-            data_origin=outcome.data_origin,
-            origin_note=outcome.origin_note,
-            unit_code=outcome.unit_code,
-            source_code=outcome.source_code,
+            data_origin=data_origin,
+            origin_note=origin_note,
+            unit_code=unit_code,
+            source_code=source_code,
             masked_content=outcome.preprocess.masked_content,
             processed_content=outcome.preprocess.processed_content,
             pii_types_detected=(
@@ -304,7 +350,7 @@ class AnalysisService:
             review_status=outcome.review_status,
             review_reason=outcome.review_reason,
             feedback_date=now_local,
-            idempotency_key=outcome.idempotency_key,
+            idempotency_key=effective_idem_key,
             source_record_id=None,
             content_hash=c_hash,
             author_hash=a_hash,

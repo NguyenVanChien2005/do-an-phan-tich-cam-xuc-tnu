@@ -3,13 +3,31 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import io
 import uuid
 from datetime import datetime
 from typing import Callable, Dict, List, Optional, Set, Tuple
+from zoneinfo import ZoneInfo
 
-import openpyxl
 import pandas as pd
+
+try:
+    import openpyxl
+except ImportError:  # pragma: no cover
+    openpyxl = None  # type: ignore[assignment]
+
+VN_TZ = ZoneInfo("Asia/Ho_Chi_Minh")
+
+__all__ = [
+    "VN_TZ",
+    "REQUIRED_IMPORT_COLUMNS",
+    "OPTIONAL_IMPORT_COLUMNS",
+    "compute_import_idempotency_key",
+    "sanitize_csv_cell",
+    "parse_feedback_datetime",
+    "ImportService",
+]
 
 from tnu_sentiment.config import AppConfig
 from tnu_sentiment.constants import (
@@ -27,7 +45,39 @@ from tnu_sentiment.nlp.preprocessor import VietnamesePreprocessor
 from tnu_sentiment.repositories.base import FeedbackRepository, NewFeedbackPayload
 
 REQUIRED_IMPORT_COLUMNS = ("sentence", "unit_code", "source_name", "feedback_date")
-OPTIONAL_IMPORT_COLUMNS = ("source_record_id", "topic_code")
+OPTIONAL_IMPORT_COLUMNS = (
+    "source_record_id",
+    "source_url",
+    "post_id",
+    "parent_comment_id",
+    "collected_at",
+    "topic_code",
+    "idempotency_key",
+)
+
+
+def compute_import_idempotency_key(
+    source_code: str,
+    source_record_id: Optional[str],
+    content_hash: str,
+    unit_code: str,
+    feedback_date: datetime,
+    explicit_key: Optional[str] = None,
+) -> str:
+    """Tính khóa chống ghi lặp (idempotency_key) xác định dựa trên:
+    1. explicit_key nếu tệp import/crawler đã cung cấp sẵn.
+    2. (source_code, source_record_id) nếu có mã bản ghi nguồn.
+    3. (content_hash, unit_code, feedback_date) nếu không có source_record_id.
+    """
+    if explicit_key and explicit_key.strip():
+        return explicit_key.strip()
+    if source_record_id and source_record_id.strip():
+        raw = f"src|{source_code.strip().upper()}|{source_record_id.strip()}"
+        return "idem-src-" + hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32]
+    raw_fallback = (
+        f"cnt|{content_hash.strip()}|{unit_code.strip().upper()}|{feedback_date.isoformat()}"
+    )
+    return "idem-cnt-" + hashlib.sha256(raw_fallback.encode("utf-8")).hexdigest()[:32]
 
 _SUPPORTED_DATE_FORMATS = (
     "%Y-%m-%d %H:%M:%S",
@@ -51,10 +101,23 @@ def sanitize_csv_cell(value: object) -> str:
 
 
 def parse_feedback_datetime(raw_val: object) -> Optional[datetime]:
+    """Chuẩn hóa thời gian phản hồi về giờ Việt Nam (Asia/Ho_Chi_Minh, naive DATETIME):
+    - Nếu có tzinfo (ví dụ +00:00 hoặc Z): chuyển sang Asia/Ho_Chi_Minh trước khi bỏ tzinfo.
+    - Nếu không có tzinfo (naive datetime): quy ước là giờ Việt Nam (Asia/Ho_Chi_Minh).
+    """
     if raw_val is None:
         return None
+    if isinstance(raw_val, pd.Timestamp):
+        if pd.isna(raw_val):
+            return None
+        dt = raw_val.to_pydatetime()
+        if dt.tzinfo is not None:
+            return dt.astimezone(VN_TZ).replace(tzinfo=None)
+        return dt
     if isinstance(raw_val, datetime):
-        return raw_val.replace(tzinfo=None)
+        if raw_val.tzinfo is not None:
+            return raw_val.astimezone(VN_TZ).replace(tzinfo=None)
+        return raw_val
     s = str(raw_val).strip()
     if not s or s.lower() in ("nan", "nat", "none"):
         return None
@@ -64,8 +127,11 @@ def parse_feedback_datetime(raw_val: object) -> Optional[datetime]:
         except ValueError:
             continue
     try:
-        dt = datetime.fromisoformat(s)
-        return dt.replace(tzinfo=None)
+        norm_s = s[:-1] + "+00:00" if s.endswith(("Z", "z")) else s
+        dt = datetime.fromisoformat(norm_s)
+        if dt.tzinfo is not None:
+            dt = dt.astimezone(VN_TZ).replace(tzinfo=None)
+        return dt
     except ValueError:
         return None
 
@@ -297,6 +363,19 @@ class ImportService:
             else:
                 resolved_topic = topic_map[raw_topic]
 
+            def _opt_str(key: str) -> Optional[str]:
+                val = r.get(key)
+                if val is None or val == "__FORMULA_BLOCKED__":
+                    return None
+                s_val = str(val).strip()
+                return s_val if s_val and s_val.lower() not in ("nan", "none") else None
+
+            src_url = _opt_str("source_url")
+            p_id = _opt_str("post_id")
+            parent_cid = _opt_str("parent_comment_id")
+            coll_dt = parse_feedback_datetime(r.get("collected_at"))
+            idem_key = _opt_str("idempotency_key")
+
             previews.append(
                 ImportRowPreview(
                     row_number=idx,
@@ -308,6 +387,11 @@ class ImportService:
                     topic_code=resolved_topic,
                     is_valid=(len(errs) == 0),
                     errors=errs,
+                    source_url=src_url,
+                    post_id=p_id,
+                    parent_comment_id=parent_cid,
+                    collected_at=coll_dt,
+                    idempotency_key=idem_key,
                 )
             )
 
@@ -321,12 +405,14 @@ class ImportService:
         previews: List[ImportRowPreview],
         repository: FeedbackRepository,
         progress_callback: Optional[Callable[[int, int], None]] = None,
+        batch_size: int = 32,
     ) -> ImportExecutionSummary:
-        """Thực thi import từng bản ghi hợp lệ và phân loại kết quả không chồng lặp,
-        đảm bảo tổng 6 nhóm kết quả bằng chính xác tổng số dòng đã đọc.
+        """Thực thi import theo lô (batched inference với batch_size = 32) cho các bản ghi hợp lệ,
+        phân loại kết quả không chồng lặp và lưu lịch sử vào bảng import_batches.
         """
         batch_id = f"batch-{uuid.uuid4().hex[:12]}"
         total_rows = len(previews)
+        safe_batch_size = max(1, int(batch_size))
 
         saved_count = 0
         duplicate_skipped_count = 0
@@ -336,16 +422,19 @@ class ImportService:
         row_errors: List[Dict[str, object]] = []
 
         seen_source_keys_in_file: Set[Tuple[str, str]] = set()
+        seen_idem_keys_in_file: Set[str] = set()
         processed_so_far = 0
 
         try:
-            for item in previews:
-                processed_so_far += 1
-                if progress_callback is not None:
-                    progress_callback(processed_so_far, total_rows)
+            # Bước 1: Lọc lỗi đầu vào, trùng bản ghi nguồn và chạy tiền xử lý trước khi gom lô suy luận
+            ready_for_inference: List[Tuple[ImportRowPreview, object, str, str]] = []
 
+            for item in previews:
                 # Nhóm 1: Lỗi đầu vào (validation error)
                 if not item.is_valid or item.feedback_date is None:
+                    processed_so_far += 1
+                    if progress_callback is not None:
+                        progress_callback(processed_so_far, total_rows)
                     validation_error_count += 1
                     row_errors.append(
                         {
@@ -363,6 +452,9 @@ class ImportService:
                     if s_key in seen_source_keys_in_file or repository.check_source_record_exists(
                         item.source_code, item.source_record_id
                     ):
+                        processed_so_far += 1
+                        if progress_callback is not None:
+                            progress_callback(processed_so_far, total_rows)
                         duplicate_skipped_count += 1
                         row_errors.append(
                             {
@@ -375,8 +467,10 @@ class ImportService:
                         continue
                     seen_source_keys_in_file.add(s_key)
 
-                # Nhóm 3: Tiền xử lý & Suy luận mô hình
                 if not self._sentiment.is_ready:
+                    processed_so_far += 1
+                    if progress_callback is not None:
+                        progress_callback(processed_so_far, total_rows)
                     inference_error_count += 1
                     row_errors.append(
                         {
@@ -390,116 +484,188 @@ class ImportService:
 
                 try:
                     prep = self._preprocessor.run(item.masked_sentence)
-                    pred = self._sentiment.predict(prep.processed_content)
-                except Exception as inf_exc:
-                    inference_error_count += 1
-                    safe_err, _ = mask_pii(str(inf_exc))
-                    row_errors.append(
-                        {
-                            "row_number": item.row_number,
-                            "category": "INFERENCE_ERROR",
-                            "masked_sentence": sanitize_csv_cell(item.masked_sentence),
-                            "detail": f"Lỗi tiền xử lý/suy luận: {safe_err}",
-                        }
+                    c_hash = compute_content_hash(prep.masked_content)
+                    idem_key = compute_import_idempotency_key(
+                        source_code=item.source_code,
+                        source_record_id=item.source_record_id,
+                        content_hash=c_hash,
+                        unit_code=item.unit_code,
+                        feedback_date=item.feedback_date,
+                        explicit_key=item.idempotency_key,
                     )
-                    continue
-
-                rev_status = ReviewStatus.UNREVIEWED.value
-                rev_reason: Optional[str] = None
-                if (
-                    pred.confidence is not None
-                    and pred.confidence < self._cfg.confidence_review_threshold
-                ):
-                    rev_status = ReviewStatus.NEEDS_REVIEW.value
-                    rev_reason = (
-                        f"Confidence ({pred.confidence:.2%}) < ngưỡng thử nghiệm "
-                        f"{self._cfg.confidence_review_threshold:.0%}"
-                    )
-                elif prep.is_multi_aspect:
-                    rev_status = ReviewStatus.NEEDS_REVIEW.value
-                    rev_reason = "Câu nhiều ý tương phản khi import"
-
-                topic_src = (
-                    TopicAssignmentSource.IMPORT.value
-                    if item.topic_code != "UNCLASSIFIED"
-                    else TopicAssignmentSource.MANUAL.value
-                )
-
-                payload = NewFeedbackPayload(
-                    data_origin=declared_origin,
-                    origin_note=origin_note,
-                    unit_code=item.unit_code,
-                    source_code=item.source_code,
-                    masked_content=prep.masked_content,
-                    processed_content=prep.processed_content,
-                    pii_types_detected=(
-                        ",".join(prep.pii_types_detected)
-                        if prep.pii_types_detected
-                        else None
-                    ),
-                    was_truncated=pred.was_truncated,
-                    is_multi_aspect=prep.is_multi_aspect,
-                    processing_status=ProcessingStatus.DONE.value,
-                    processing_error=None,
-                    predicted_sentiment_label=pred.label_id,
-                    predicted_sentiment_text=pred.label_code,
-                    confidence_score=pred.confidence,
-                    prob_negative=pred.probabilities.get(0),
-                    prob_neutral=pred.probabilities.get(1),
-                    prob_positive=pred.probabilities.get(2),
-                    predicted_topic_code=item.topic_code,
-                    topic_assignment_source=topic_src,
-                    model_version=pred.model_version,
-                    pipeline_version=prep.pipeline_version,
-                    inference_time_ms=pred.inference_time_ms,
-                    review_status=rev_status,
-                    review_reason=rev_reason,
-                    feedback_date=item.feedback_date,
-                    idempotency_key=f"{batch_id}-row-{item.row_number}",
-                    source_record_id=item.source_record_id,
-                    content_hash=compute_content_hash(prep.masked_content),
-                    author_hash=compute_author_hash(
-                        f"{item.source_code}:{item.unit_code}", self._cfg.secret_salt
-                    ),
-                    batch_id=batch_id,
-                )
-
-                # Nhóm 4 & 5: Ghi vào Repository
-                try:
-                    save_res = repository.save_feedback(payload)
-                    if save_res.saved:
-                        saved_count += 1
-                    elif save_res.was_source_duplicate or save_res.was_idempotent_duplicate:
+                    if idem_key in seen_idem_keys_in_file:
+                        processed_so_far += 1
+                        if progress_callback is not None:
+                            progress_callback(processed_so_far, total_rows)
                         duplicate_skipped_count += 1
                         row_errors.append(
                             {
                                 "row_number": item.row_number,
                                 "category": "DUPLICATE_SKIPPED",
                                 "masked_sentence": sanitize_csv_cell(item.masked_sentence),
-                                "detail": save_res.message,
+                                "detail": f"Bỏ qua do trùng idempotency_key ({idem_key}) ngay trong tệp.",
                             }
                         )
-                    else:
+                        continue
+                    seen_idem_keys_in_file.add(idem_key)
+                    ready_for_inference.append((item, prep, c_hash, idem_key))
+                except Exception as prep_exc:
+                    processed_so_far += 1
+                    if progress_callback is not None:
+                        progress_callback(processed_so_far, total_rows)
+                    inference_error_count += 1
+                    safe_err, _ = mask_pii(str(prep_exc))
+                    row_errors.append(
+                        {
+                            "row_number": item.row_number,
+                            "category": "INFERENCE_ERROR",
+                            "masked_sentence": sanitize_csv_cell(item.masked_sentence),
+                            "detail": f"Lỗi tiền xử lý: {safe_err}",
+                        }
+                    )
+
+            # Bước 2: Chạy suy luận theo lô (batched inference với batch_size = 32)
+            for start in range(0, len(ready_for_inference), safe_batch_size):
+                chunk = ready_for_inference[start : start + safe_batch_size]
+                batch_texts = [prep_obj.processed_content for (_it, prep_obj, _ch, _ik) in chunk]  # type: ignore[attr-defined]
+
+                try:
+                    batch_preds = self._sentiment.predict_batch(
+                        batch_texts, batch_size=safe_batch_size
+                    )
+                    paired_preds: List[Tuple[ImportRowPreview, object, str, str, Optional[object], Optional[Exception]]] = [
+                        (chunk[i][0], chunk[i][1], chunk[i][2], chunk[i][3], batch_preds[i], None)
+                        for i in range(len(chunk))
+                    ]
+                except Exception:
+                    # Fallback từng câu trong lô nếu 1 câu trong lô gây lỗi cá biệt
+                    paired_preds = []
+                    for it_c, prep_c, ch_c, ik_c in chunk:
+                        try:
+                            single_pred = self._sentiment.predict(prep_c.processed_content)  # type: ignore[attr-defined]
+                            paired_preds.append((it_c, prep_c, ch_c, ik_c, single_pred, None))
+                        except Exception as single_exc:
+                            paired_preds.append((it_c, prep_c, ch_c, ik_c, None, single_exc))
+
+                for item, prep, c_hash, idem_key, pred, inf_exc in paired_preds:
+                    processed_so_far += 1
+                    if progress_callback is not None:
+                        progress_callback(processed_so_far, total_rows)
+
+                    if inf_exc is not None or pred is None:
+                        inference_error_count += 1
+                        safe_err, _ = mask_pii(str(inf_exc))
+                        row_errors.append(
+                            {
+                                "row_number": item.row_number,
+                                "category": "INFERENCE_ERROR",
+                                "masked_sentence": sanitize_csv_cell(item.masked_sentence),
+                                "detail": f"Lỗi tiền xử lý/suy luận: {safe_err}",
+                            }
+                        )
+                        continue
+
+                    rev_status = ReviewStatus.UNREVIEWED.value
+                    rev_reason: Optional[str] = None
+                    if (
+                        pred.confidence is not None  # type: ignore[attr-defined]
+                        and pred.confidence < self._cfg.confidence_review_threshold  # type: ignore[attr-defined]
+                    ):
+                        rev_status = ReviewStatus.NEEDS_REVIEW.value
+                        rev_reason = (
+                            f"Confidence ({pred.confidence:.2%}) < ngưỡng thử nghiệm "  # type: ignore[attr-defined]
+                            f"{self._cfg.confidence_review_threshold:.0%}"
+                        )
+                    elif prep.is_multi_aspect:  # type: ignore[attr-defined]
+                        rev_status = ReviewStatus.NEEDS_REVIEW.value
+                        rev_reason = "Câu nhiều ý tương phản khi import"
+
+                    topic_src = (
+                        TopicAssignmentSource.IMPORT.value
+                        if item.topic_code != "UNCLASSIFIED"
+                        else TopicAssignmentSource.MANUAL.value
+                    )
+
+                    assert item.feedback_date is not None
+                    payload = NewFeedbackPayload(
+                        data_origin=declared_origin,
+                        origin_note=origin_note,
+                        unit_code=item.unit_code,
+                        source_code=item.source_code,
+                        masked_content=prep.masked_content,  # type: ignore[attr-defined]
+                        processed_content=prep.processed_content,  # type: ignore[attr-defined]
+                        pii_types_detected=(
+                            ",".join(prep.pii_types_detected)  # type: ignore[attr-defined]
+                            if prep.pii_types_detected  # type: ignore[attr-defined]
+                            else None
+                        ),
+                        was_truncated=pred.was_truncated,  # type: ignore[attr-defined]
+                        is_multi_aspect=prep.is_multi_aspect,  # type: ignore[attr-defined]
+                        processing_status=ProcessingStatus.DONE.value,
+                        processing_error=None,
+                        predicted_sentiment_label=pred.label_id,  # type: ignore[attr-defined]
+                        predicted_sentiment_text=pred.label_code,  # type: ignore[attr-defined]
+                        confidence_score=pred.confidence,  # type: ignore[attr-defined]
+                        prob_negative=pred.probabilities.get(0),  # type: ignore[attr-defined]
+                        prob_neutral=pred.probabilities.get(1),  # type: ignore[attr-defined]
+                        prob_positive=pred.probabilities.get(2),  # type: ignore[attr-defined]
+                        predicted_topic_code=item.topic_code,
+                        topic_assignment_source=topic_src,
+                        model_version=pred.model_version,  # type: ignore[attr-defined]
+                        pipeline_version=prep.pipeline_version,  # type: ignore[attr-defined]
+                        inference_time_ms=pred.inference_time_ms,  # type: ignore[attr-defined]
+                        review_status=rev_status,
+                        review_reason=rev_reason,
+                        feedback_date=item.feedback_date,
+                        idempotency_key=idem_key,
+                        source_record_id=item.source_record_id,
+                        source_url=item.source_url,
+                        post_id=item.post_id,
+                        parent_comment_id=item.parent_comment_id,
+                        collected_at=item.collected_at,
+                        content_hash=c_hash,
+                        author_hash=compute_author_hash(
+                            f"{item.source_code}:{item.unit_code}", self._cfg.secret_salt
+                        ),
+                        batch_id=batch_id,
+                    )
+
+                    # Nhóm 4 & 5: Ghi vào Repository
+                    try:
+                        save_res = repository.save_feedback(payload)
+                        if save_res.saved:
+                            saved_count += 1
+                        elif save_res.was_source_duplicate or save_res.was_idempotent_duplicate:
+                            duplicate_skipped_count += 1
+                            row_errors.append(
+                                {
+                                    "row_number": item.row_number,
+                                    "category": "DUPLICATE_SKIPPED",
+                                    "masked_sentence": sanitize_csv_cell(item.masked_sentence),
+                                    "detail": save_res.message,
+                                }
+                            )
+                        else:
+                            db_error_count += 1
+                            row_errors.append(
+                                {
+                                    "row_number": item.row_number,
+                                    "category": "DB_ERROR",
+                                    "masked_sentence": sanitize_csv_cell(item.masked_sentence),
+                                    "detail": save_res.message,
+                                }
+                            )
+                    except Exception as db_exc:
                         db_error_count += 1
+                        safe_db_err, _ = mask_pii(str(db_exc))
                         row_errors.append(
                             {
                                 "row_number": item.row_number,
                                 "category": "DB_ERROR",
                                 "masked_sentence": sanitize_csv_cell(item.masked_sentence),
-                                "detail": save_res.message,
+                                "detail": f"Lỗi ghi dữ liệu: {safe_db_err}",
                             }
                         )
-                except Exception as db_exc:
-                    db_error_count += 1
-                    safe_db_err, _ = mask_pii(str(db_exc))
-                    row_errors.append(
-                        {
-                            "row_number": item.row_number,
-                            "category": "DB_ERROR",
-                            "masked_sentence": sanitize_csv_cell(item.masked_sentence),
-                            "detail": f"Lỗi ghi dữ liệu: {safe_db_err}",
-                        }
-                    )
         except Exception as fatal_exc:
             safe_fatal, _ = mask_pii(str(fatal_exc))
             row_errors.append(
@@ -520,7 +686,7 @@ class ImportService:
         )
         unprocessed_count = max(0, total_rows - accounted)
 
-        return ImportExecutionSummary(
+        summary = ImportExecutionSummary(
             batch_id=batch_id,
             filename=filename,
             declared_origin=declared_origin,
@@ -533,6 +699,8 @@ class ImportService:
             unprocessed_count=unprocessed_count,
             row_errors=row_errors,
         )
+        repository.save_import_batch(summary, origin_note=origin_note)
+        return summary
 
     @staticmethod
     def export_error_report_csv(summary: ImportExecutionSummary) -> bytes:

@@ -53,6 +53,10 @@ CREATE TABLE IF NOT EXISTS feedbacks (
     feedback_id BIGINT AUTO_INCREMENT PRIMARY KEY,
     idempotency_key VARCHAR(128) NULL UNIQUE COMMENT 'Chống ghi lặp khi bấm Lưu nhiều lần cùng một thao tác',
     source_record_id VARCHAR(191) NULL COMMENT 'Mã bản ghi gốc từ hệ thống/file nguồn để chống import lặp',
+    source_url VARCHAR(500) NULL COMMENT 'Đường dẫn bài đăng hoặc nguồn thu thập gốc',
+    post_id VARCHAR(191) NULL COMMENT 'Mã bài đăng gốc (Facebook/YouTube/News)',
+    parent_comment_id VARCHAR(191) NULL COMMENT 'Mã bình luận cha (nếu là phản hồi cấp 2)',
+    collected_at DATETIME NULL COMMENT 'Thời điểm thu thập bình luận về hệ thống',
     content_hash CHAR(64) NOT NULL COMMENT 'SHA-256 nội dung chuẩn hóa để gợi ý ứng viên trùng (không chặn phản hồi độc lập)',
     author_hash CHAR(64) NULL COMMENT 'Mã băm ẩn danh nội bộ, không hiển thị ra UI/Export',
 
@@ -157,7 +161,10 @@ INSERT IGNORE INTO sources (source_code, source_name, description) VALUES
     ('LMS_FEEDBACK', 'Hệ thống học tập trực tuyến (LMS)', 'Phản hồi từ hệ thống quản lý học tập'),
     ('STUDENT_FORUM', 'Kênh phản hồi sinh viên', 'Diễn đàn / cổng thông tin sinh viên'),
     ('QA_BOX', 'Hòm thư góp ý đơn vị', 'Kênh tiếp nhận ý kiến trực tiếp hoặc biểu mẫu góp ý'),
-    ('CSV_IMPORT', 'Nhập từ tệp CSV/XLSX', 'Dữ liệu nạp theo lô qua chức năng Import');
+    ('CSV_IMPORT', 'Nhập từ tệp CSV/XLSX', 'Dữ liệu nạp theo lô qua chức năng Import'),
+    ('FACEBOOK', 'Bình luận Fanpage / Hội nhóm Facebook', 'Bình luận thu thập qua Facebook Graph API'),
+    ('YOUTUBE', 'Bình luận kênh YouTube', 'Bình luận thu thập từ video/kênh YouTube'),
+    ('NEWS_COMMENT', 'Bình luận bài viết / Bản tin điện tử', 'Bình luận thu thập từ chuyên trang tin tức/bài đăng');
 
 INSERT IGNORE INTO topics (topic_code, topic_name, corpus_label_idx) VALUES
     ('UNCLASSIFIED', 'Chưa phân loại', NULL),

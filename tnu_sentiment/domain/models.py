@@ -139,6 +139,10 @@ class FeedbackRecord:
 
     idempotency_key: Optional[str] = None
     source_record_id: Optional[str] = None
+    source_url: Optional[str] = None
+    post_id: Optional[str] = None
+    parent_comment_id: Optional[str] = None
+    collected_at: Optional[datetime] = None
     content_hash: str = ""
 
     def effective_sentiment_label(self, policy: LabelPolicy) -> Optional[int]:
@@ -289,6 +293,11 @@ class ImportRowPreview:
     topic_code: str
     is_valid: bool
     errors: List[str]
+    source_url: Optional[str] = None
+    post_id: Optional[str] = None
+    parent_comment_id: Optional[str] = None
+    collected_at: Optional[datetime] = None
+    idempotency_key: Optional[str] = None
 
 
 @dataclass(frozen=True)

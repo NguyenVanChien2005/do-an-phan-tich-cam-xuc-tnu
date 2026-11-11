@@ -274,6 +274,10 @@ class VietnamesePreprocessor:
             compatibility_notes=compat_notes,
         )
 
+    def preprocess(self, raw_text: str) -> str:
+        """Trả về chuỗi processed_content đã qua đầy đủ 6 bước tiền xử lý và tách từ pyvi."""
+        return self.run(raw_text).processed_content
+
     @staticmethod
     def _restore_pii_tokens(text: str) -> str:
         restored = text

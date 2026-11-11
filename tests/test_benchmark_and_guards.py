@@ -85,3 +85,78 @@ def test_checkpoint_validator_rejects_base_model_without_classification_head(tmp
     with pytest.raises(ValueError, match="base model"):
         validate_sentiment_checkpoint_dir(ckpt)
 
+
+def test_checkpoint_manifest_and_download_script_sha256_verification(tmp_path: Path) -> None:
+    """Bước 2.2: Kiểm tra models/checkpoint_manifest.json và cơ chế kiểm tra SHA-256 của download_checkpoint.py."""
+    import hashlib
+    from scripts.download_checkpoint import (
+        DEFAULT_MANIFEST_PATH,
+        download_checkpoint,
+        load_manifest,
+        verify_checkpoint_sha256,
+    )
+
+    manifest = load_manifest(DEFAULT_MANIFEST_PATH)
+    assert len(manifest["sha256"]) == 64
+    assert "transformers" in manifest
+    assert "underthesea" in manifest
+    assert "pyvi" in manifest
+    assert "preprocessor_version" in manifest
+
+    # Tạo một file trọng số giả lập để kiểm thử tải và xác thực SHA-256
+    fake_weights_bytes = b"fake-phobert-safetensors-payload-for-test"
+    fake_sha256 = hashlib.sha256(fake_weights_bytes).hexdigest()
+    source_file = tmp_path / "source_model.safetensors"
+    source_file.write_bytes(fake_weights_bytes)
+
+    custom_manifest_path = tmp_path / "checkpoint_manifest.json"
+    custom_manifest_path.write_text(
+        json.dumps(
+            {
+                "sha256": fake_sha256,
+                "weights_file": "model.safetensors",
+                "transformers": "5.22.1",
+                "underthesea": "6.8.4",
+                "pyvi": "0.1.1",
+                "preprocessor_version": "tnu-preprocess-v1.1-pyvi",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    target_dir = tmp_path / "downloaded_ckpt"
+    out_path = download_checkpoint(
+        manifest_path=custom_manifest_path,
+        target_dir=target_dir,
+        url=str(source_file),
+    )
+    assert out_path.exists()
+    assert verify_checkpoint_sha256(out_path, fake_sha256) is True
+
+    # Nếu SHA-256 không khớp -> phải báo lỗi ValueError và xóa file lỗi
+    bad_source = tmp_path / "corrupted_model.safetensors"
+    bad_source.write_bytes(b"corrupted-bytes")
+    bad_target_dir = tmp_path / "bad_ckpt"
+    with pytest.raises(ValueError, match="SHA-256"):
+        download_checkpoint(
+            manifest_path=custom_manifest_path,
+            target_dir=bad_target_dir,
+            url=str(bad_source),
+            force=True,
+        )
+    assert not (bad_target_dir / "model.safetensors").exists()
+
+
+@pytest.mark.requires_checkpoint
+def test_real_checkpoint_matches_manifest_sha256() -> None:
+    """Bước 2.1 & 2.2: Xác thực SHA-256 của model.safetensors thật khớp với models/checkpoint_manifest.json."""
+    from scripts.download_checkpoint import DEFAULT_MANIFEST_PATH, ROOT_DIR, download_checkpoint, load_manifest
+
+    manifest = load_manifest(DEFAULT_MANIFEST_PATH)
+    weights_path = ROOT_DIR / manifest["checkpoint_dir"] / manifest["weights_file"]
+    if not weights_path.exists():
+        pytest.skip(
+            "Thiếu file trọng số model.safetensors (515MB). Chạy python scripts/download_checkpoint.py để tải."
+        )
+    verified_path = download_checkpoint(verify_only=True)
+    assert verified_path == weights_path
